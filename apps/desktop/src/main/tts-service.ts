@@ -12,9 +12,9 @@ import {
   type TTSSettings,
   type TTSVoice,
 } from '@amctk/shared'
+import type { WindowHost } from './host/types'
 import type { ScopedLogger } from './logger'
 import type { Storage } from './storage'
-import type { WindowManager } from './windows'
 
 interface QueueItem extends TTSPlaybackInfo {
   audio?: Promise<TTSAudioResult | null>
@@ -56,7 +56,7 @@ export class TTSService {
 
   constructor(
     settings: TTSSettings,
-    private windows: WindowManager,
+    private windows: Pick<WindowHost, 'sendAudio' | 'stopAudioEverywhere'>,
     private storage: Storage,
     private log: ScopedLogger,
     private getSins: () => SevenSins,

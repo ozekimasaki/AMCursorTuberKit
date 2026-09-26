@@ -50,7 +50,7 @@ export function createMockApi(): AmctkApi {
       ],
     },
     streams: [
-      { platform: 'youtube', state: 'disabled', stability: 'stable', eventCount: 0 },
+      { platform: 'youtube', state: 'disabled', stability: 'beta', eventCount: 0 },
       { platform: 'twitch', state: 'disabled', stability: 'stable', eventCount: 0 },
       { platform: 'kick', state: 'disabled', stability: 'beta', eventCount: 0 },
       { platform: 'tiktok', state: 'disabled', stability: 'experimental', eventCount: 0 },
@@ -177,7 +177,7 @@ export function createMockApi(): AmctkApi {
       openFolder: async () => {},
     },
     app: {
-      info: async () => ({ version: '0.1.0', electron: '-', node: '-', chrome: navigator.userAgent, platform: 'browser', userData: '-', nodeOk: true }),
+      info: async () => ({ version: '0.1.0', host: 'ブラウザプレビュー', node: '-', chrome: navigator.userAgent, platform: 'browser', userData: '-', nodeOk: true }),
       openExternal: async (url) => void window.open(url, '_blank'),
       role: /stage\.html/.test(location.pathname) ? 'stage' : 'control',
     },

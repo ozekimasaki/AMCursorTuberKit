@@ -1,7 +1,7 @@
-import { KickRelayAdapter } from '@amctk/stream-kick'
+import { KickPusherAdapter, KickRelayAdapter } from '@amctk/stream-kick'
 import { TikTokBridgeAdapter } from '@amctk/stream-tiktok'
-import { TwitchStreamAdapter, pollDeviceToken, startDeviceFlow } from '@amctk/stream-twitch'
-import { YouTubeStreamAdapter } from '@amctk/stream-youtube'
+import { TwitchIrcAdapter, TwitchStreamAdapter, pollDeviceToken, startDeviceFlow } from '@amctk/stream-twitch'
+import { YouTubeInnertubeAdapter, YouTubeStreamAdapter } from '@amctk/stream-youtube'
 import type { BaseStreamAdapter } from '@amctk/stream-core'
 import {
   uid,
@@ -15,16 +15,32 @@ import type { Logger } from './logger'
 import type { SecretService } from './secret-service'
 
 type ExternalPlatform = Exclude<StreamPlatform, 'manual'>
+type StreamSettings = AppSettings['stream']
 const PLATFORMS: ExternalPlatform[] = ['youtube', 'twitch', 'kick', 'tiktok']
-const STABILITY: Record<ExternalPlatform, StreamSourceHealth['stability']> = {
-  youtube: 'stable',
-  twitch: 'stable',
-  kick: 'beta',
-  tiktok: 'experimental',
+const SWITCHABLE = ['youtube', 'twitch', 'kick'] as const
+
+/** 未接続時に表示する安定度。接続中は各Adapterの値を使う */
+function stabilityOf(platform: ExternalPlatform, s: StreamSettings): StreamSourceHealth['stability'] {
+  switch (platform) {
+    case 'youtube':
+      return s.youtube.source === 'api' ? 'stable' : 'beta'
+    case 'twitch':
+      return 'stable'
+    case 'kick':
+      return 'beta'
+    case 'tiktok':
+      return 'experimental'
+  }
+}
+
+export interface StreamServiceDeps {
+  /** Kick の slug → チャットルームID（Electron の通信処理で調べる） */
+  resolveKickChatroomId(slug: string): Promise<number>
 }
 
 /**
  * 各プラットフォームを独立して接続する。1つが落ちても他は継続（Platform Failure Isolation）。
+ * YouTube / Twitch / Kick は取得経路（web: APIキー不要 / api: 公式API）を設定で選ぶ。
  */
 export class StreamSourceService {
   private adapters = new Map<ExternalPlatform, BaseStreamAdapter>()
@@ -36,6 +52,7 @@ export class StreamSourceService {
     private getSettings: () => AppSettings,
     private secrets: SecretService,
     private logger: Logger,
+    private deps: StreamServiceDeps,
   ) {}
 
   private create(platform: ExternalPlatform): BaseStreamAdapter {
@@ -44,8 +61,10 @@ export class StreamSourceService {
       this.logger.log(level, category, m, d)
     switch (platform) {
       case 'youtube':
+        if (s.youtube.source === 'web') return new YouTubeInnertubeAdapter({ target: s.youtube.target }, log('stream.youtube'))
         return new YouTubeStreamAdapter({ target: s.youtube.target, apiKey: this.secrets.get('youtubeApiKey') }, log('stream.youtube'))
       case 'twitch':
+        if (s.twitch.source === 'web') return new TwitchIrcAdapter({ channelLogin: s.twitch.channelLogin }, log('stream.twitch'))
         return new TwitchStreamAdapter(
           {
             clientId: s.twitch.clientId,
@@ -62,6 +81,16 @@ export class StreamSourceService {
           log('stream.twitch'),
         )
       case 'kick':
+        if (s.kick.source === 'web') {
+          return new KickPusherAdapter(
+            {
+              channelSlug: s.kick.channelSlug,
+              chatroomId: Number(s.kick.chatroomId.trim()) || undefined,
+              resolveChatroomId: (slug) => this.deps.resolveKickChatroomId(slug),
+            },
+            log('stream.kick'),
+          )
+        }
         return new KickRelayAdapter(
           { relayUrl: s.kick.relayUrl, channelSlug: s.kick.channelSlug, relaySecret: this.secrets.get('kickRelaySecret') },
           log('stream.kick'),
@@ -120,6 +149,15 @@ export class StreamSourceService {
     await Promise.all(PLATFORMS.map((p) => this.disconnect(p)))
   }
 
+  /** 取得経路を切り替えたら、接続中のものは新しい経路でつなぎ直す。安定度の表示も更新する */
+  handleSettingsChange(next: StreamSettings, prev: StreamSettings) {
+    for (const p of SWITCHABLE) {
+      if (next[p].source === prev[p].source || !this.adapters.has(p)) continue
+      void this.connect(p).catch((err) => this.logger.log('warn', 'stream', 'reconnect failed', { platform: p, error: String(err) }))
+    }
+    this.emitHealth()
+  }
+
   health(): StreamSourceHealth[] {
     const s = this.getSettings().stream
     return PLATFORMS.map(
@@ -127,7 +165,7 @@ export class StreamSourceService {
         this.adapters.get(p)?.health() ?? {
           platform: p,
           state: s[p].enabled ? 'disconnected' : 'disabled',
-          stability: STABILITY[p],
+          stability: stabilityOf(p, s),
           eventCount: 0,
         },
     )
@@ -137,7 +175,7 @@ export class StreamSourceService {
     this.onHealth?.(this.health())
   }
 
-  /** Twitch Device Code Flow。コードを返し、裏でトークン取得を待つ */
+  /** Twitch Device Code Flow（公式API用）。コードを返し、裏でトークン取得を待つ */
   async twitchDeviceLogin(onDone: (ok: boolean, message: string) => void): Promise<TwitchDeviceLogin> {
     const clientId = this.getSettings().stream.twitch.clientId
     if (!clientId) throw new Error('先に Twitch Client ID を入力してください')

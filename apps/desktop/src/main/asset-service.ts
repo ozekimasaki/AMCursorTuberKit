@@ -1,9 +1,8 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { dialog, net, protocol, type BrowserWindow } from 'electron'
 import { unzipSync } from 'fflate'
 import { uid, type AssetImportKind, type ImportedAsset } from '@amctk/shared'
+import type { DialogHost, OpenDialogOptions, RendererRef } from './host/types'
 import type { ScopedLogger } from './logger'
 
 export const ASSET_SCHEME = 'amctk-asset'
@@ -11,43 +10,34 @@ export const ASSET_SCHEME = 'amctk-asset'
 const IMAGE_EXT = ['png', 'webp', 'gif', 'jpg', 'jpeg']
 const MAX_FILE = 600 * 1024 * 1024
 
-export function registerAssetScheme() {
-  protocol.registerSchemesAsPrivileged([
-    { scheme: ASSET_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
-  ])
-}
-
 /**
  * アバター素材は userData/assets/<assetId>/ にコピーしてから使う。
  * Rendererからは amctk-asset://<assetId>/<file> でだけ参照でき、それ以外のパスは読めない。
+ * 配信そのものはデスクトップ基盤（DesktopHost.serveAssets）が resolveUrl を使って行う。
  */
 export class AssetService {
   readonly root: string
 
-  constructor(userData: string, private log: ScopedLogger) {
+  constructor(
+    userData: string,
+    private dialogs: DialogHost,
+    private log: ScopedLogger,
+  ) {
     this.root = join(userData, 'assets')
   }
 
-  handleProtocol() {
-    protocol.handle(ASSET_SCHEME, async (request) => {
-      try {
-        const url = new URL(request.url)
-        const assetId = url.hostname
-        const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '')
-        const target = resolve(this.root, assetId, rel)
-        if (!target.startsWith(resolve(this.root) + sep) || !/^[a-z0-9-]+$/i.test(assetId)) {
-          return new Response('forbidden', { status: 403 })
-        }
-        const res = await net.fetch(pathToFileURL(target).toString())
-        const headers = new Headers(res.headers)
-        headers.set('Access-Control-Allow-Origin', '*')
-        headers.set('Cache-Control', 'no-cache')
-        return new Response(res.body, { status: res.status, headers })
-      } catch (err) {
-        this.log.warn('asset protocol error', { error: String(err) })
-        return new Response('not found', { status: 404 })
-      }
-    })
+  /** amctk-asset://<assetId>/<path> を配信してよいファイルのパスへ変換する。assets の外や不正なIDは null */
+  resolveUrl(raw: string): string | null {
+    try {
+      const url = new URL(raw)
+      const assetId = url.hostname
+      if (!/^[a-z0-9-]+$/i.test(assetId)) return null
+      const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+      const target = resolve(this.root, assetId, rel)
+      return target.startsWith(resolve(this.root) + sep) ? target : null
+    } catch {
+      return null
+    }
   }
 
   static url(assetId: string, file: string) {
@@ -58,32 +48,31 @@ export class AssetService {
     return join(this.root, assetId)
   }
 
-  async import(win: BrowserWindow | null, kind: AssetImportKind, options: { assetId?: string; slot?: string } = {}): Promise<ImportedAsset | null> {
+  /** owner はファイル選択ダイアログの親にするウィンドウ */
+  async import(owner: RendererRef | null, kind: AssetImportKind, options: { assetId?: string; slot?: string } = {}): Promise<ImportedAsset | null> {
     await mkdir(this.root, { recursive: true })
     switch (kind) {
       case 'png-slot':
-        return this.importPngSlot(win, options.assetId, options.slot ?? 'idle')
+        return this.importPngSlot(owner, options.assetId, options.slot ?? 'idle')
       case 'motion-png':
-        return this.importFolder(win, 'motion', detectMotionPng)
+        return this.importFolder(owner, 'motion', detectMotionPng)
       case 'live2d':
-        return this.importFolder(win, 'live2d', detectLive2D)
+        return this.importFolder(owner, 'live2d', detectLive2D)
       case 'vrm':
-        return this.importSingle(win, 'vrm', [{ name: 'VRM', extensions: ['vrm'] }], (f) => ({ vrm: f }))
+        return this.importSingle(owner, 'vrm', [{ name: 'VRM', extensions: ['vrm'] }], (f) => ({ vrm: f }))
       case 'live2d-core':
-        return this.importSingle(win, 'cubism-core', [{ name: 'Cubism Core', extensions: ['js'] }], (f) => ({ core: f }))
+        return this.importSingle(owner, 'cubism-core', [{ name: 'Cubism Core', extensions: ['js'] }], (f) => ({ core: f }))
       case 'purupuru':
-        return this.importPuruPuru(win)
+        return this.importPuruPuru(owner)
     }
   }
 
-  private async pick(win: BrowserWindow | null, opts: Electron.OpenDialogOptions): Promise<string[] | null> {
-    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
-    if (res.canceled || !res.filePaths.length) return null
-    return res.filePaths
+  private pick(owner: RendererRef | null, opts: OpenDialogOptions): Promise<string[] | null> {
+    return this.dialogs.open(owner, opts)
   }
 
-  private async importPngSlot(win: BrowserWindow | null, assetId: string | undefined, slot: string): Promise<ImportedAsset | null> {
-    const picked = await this.pick(win, { title: '画像を選択', properties: ['openFile'], filters: [{ name: 'Image', extensions: IMAGE_EXT }] })
+  private async importPngSlot(owner: RendererRef | null, assetId: string | undefined, slot: string): Promise<ImportedAsset | null> {
+    const picked = await this.pick(owner, { title: '画像を選択', filters: [{ name: 'Image', extensions: IMAGE_EXT }] })
     if (!picked) return null
     const id = assetId && /^png-[a-z0-9]+$/.test(assetId) ? assetId : `png-${uid()}`
     const safeSlot = slot.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -94,12 +83,12 @@ export class AssetService {
   }
 
   private async importSingle(
-    win: BrowserWindow | null,
+    owner: RendererRef | null,
     prefix: string,
-    filters: Electron.FileFilter[],
+    filters: NonNullable<OpenDialogOptions['filters']>,
     detect: (file: string) => Record<string, string>,
   ): Promise<ImportedAsset | null> {
-    const picked = await this.pick(win, { properties: ['openFile'], filters })
+    const picked = await this.pick(owner, { filters })
     if (!picked) return null
     const s = await stat(picked[0])
     if (s.size > MAX_FILE) throw new Error('ファイルが大きすぎます')
@@ -111,11 +100,11 @@ export class AssetService {
   }
 
   private async importFolder(
-    win: BrowserWindow | null,
+    owner: RendererRef | null,
     prefix: string,
     detect: (files: string[], dir: string) => Promise<Record<string, string>>,
   ): Promise<ImportedAsset | null> {
-    const picked = await this.pick(win, { title: 'フォルダを選択', properties: ['openDirectory'] })
+    const picked = await this.pick(owner, { title: 'フォルダを選択', directory: true })
     if (!picked) return null
     const id = `${prefix}-${uid()}`
     const dest = this.dir(id)
@@ -135,10 +124,9 @@ export class AssetService {
     return { assetId: id, files, detected }
   }
 
-  private async importPuruPuru(win: BrowserWindow | null): Promise<ImportedAsset | null> {
-    const picked = await this.pick(win, {
+  private async importPuruPuru(owner: RendererRef | null): Promise<ImportedAsset | null> {
+    const picked = await this.pick(owner, {
       title: '.purupuru パッケージ または manifest.json を選択',
-      properties: ['openFile'],
       filters: [{ name: 'PuruPuru', extensions: ['purupuru', 'zip', 'json'] }],
     })
     if (!picked) return null

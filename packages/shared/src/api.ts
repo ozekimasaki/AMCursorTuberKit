@@ -38,7 +38,8 @@ export interface ModelOption {
 
 export interface AppInfo {
   version: string
-  electron: string
+  /** デスクトップ基盤の名前とバージョン（例: Electron 44.4.5） */
+  host: string
   node: string
   chrome: string
   platform: string

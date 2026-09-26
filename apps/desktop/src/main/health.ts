@@ -10,6 +10,8 @@ export function nodeVersionOk(version = process.versions.node): boolean {
 
 /** 起動時・設定変更時の依存サービス Health Check。1つの失敗が他を止めないよう個別に実行 */
 export async function runHealthCheck(deps: {
+  /** デスクトップ基盤の表示名（例: Electron 44.4.5） */
+  hostLabel: string
   settings: AppSettings
   orchestrator: Orchestrator
   tts: TTSService
@@ -34,7 +36,7 @@ export async function runHealthCheck(deps: {
         id: 'runtime',
         label: 'ランタイム',
         level: nodeVersionOk() ? 'ok' : 'error',
-        message: `Node ${process.versions.node} / Electron ${process.versions.electron}${nodeVersionOk() ? '' : '（Node 22.13 以上が必要です）'}`,
+        message: `Node ${process.versions.node} / ${deps.hostLabel}${nodeVersionOk() ? '' : '（Node 22.13 以上が必要です）'}`,
       }),
       { id: 'runtime', label: 'ランタイム', level: 'error' },
     ),

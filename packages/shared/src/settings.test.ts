@@ -35,6 +35,15 @@ describe('settings', () => {
     expect(style.character.baseline.wrath).toBe(80)
   })
 
+  it('配信コメントの取得経路は既定でAPIキー不要（web）。保存済みの設定にも補われ、公式APIの選択は残す', () => {
+    const s = defaultSettings().stream
+    expect([s.youtube.source, s.twitch.source, s.kick.source]).toEqual(['web', 'web', 'web'])
+    expect(s.kick.chatroomId).toBe('')
+    const saved = parseSettings({ stream: { youtube: { enabled: true, target: 'abcdefghijk' }, twitch: { source: 'api', clientId: 'cid' } } })
+    expect(saved.stream.youtube).toMatchObject({ enabled: true, source: 'web', target: 'abcdefghijk' })
+    expect(saved.stream.twitch).toMatchObject({ source: 'api', clientId: 'cid' })
+  })
+
   it('組み込みアバターの既定はココア。旧版の既定色（strawberry）だけ移行し、選び直した色は残す', () => {
     expect(defaultSettings().avatar.builtin).toEqual({ palette: 'cocoa', revision: 2 })
     expect(parseSettings({ avatar: { kind: 'builtin', builtin: { palette: 'strawberry' } } }).avatar.builtin.palette).toBe('cocoa')

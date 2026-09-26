@@ -1,10 +1,14 @@
 import type { StreamEvent, StreamEventKind } from '@amctk/shared'
 import { BaseStreamAdapter, FatalStreamError, JsonObjectStreamParser, type StreamLogger } from '@amctk/stream-core'
+import { findLiveVideoId, parseYouTubeTarget } from './target'
+
+export * from './innertube'
+export { extractLiveVideoId, findLiveVideoId, parseYouTubeTarget, type YouTubeTarget } from './target'
 
 const API = 'https://youtube.googleapis.com/youtube/v3'
 
 export interface YouTubeOptions {
-  /** 配信URL / 動画ID / liveChatId */
+  /** 配信URL / 動画ID / チャンネルURL（@ハンドル） / liveChatId */
   target: string
   apiKey: string
 }
@@ -39,17 +43,8 @@ interface LiveChatResponse {
   error?: { message?: string; errors?: { reason?: string }[] }
 }
 
-export function parseYouTubeTarget(target: string): { videoId?: string; liveChatId?: string } {
-  const t = target.trim()
-  if (!t) return {}
-  const url = t.match(/(?:v=|youtu\.be\/|\/live\/|\/shorts\/)([A-Za-z0-9_-]{11})/)
-  if (url) return { videoId: url[1] }
-  if (/^[A-Za-z0-9_-]{11}$/.test(t)) return { videoId: t }
-  return { liveChatId: t }
-}
-
 /**
- * YouTube Live Chat
+ * YouTube Live Chat（公式API）
  * 1. liveChatMessages.streamList（サーバーストリーミング）で低遅延受信
  * 2. 使えない場合は liveChatMessages.list のポーリングへ自動で切り替える
  */
@@ -78,9 +73,10 @@ export class YouTubeStreamAdapter extends BaseStreamAdapter {
   }
 
   private async resolveLiveChatId(): Promise<string> {
-    const { videoId, liveChatId } = parseYouTubeTarget(this.options.target)
-    if (liveChatId) return liveChatId
-    if (!videoId) throw new FatalStreamError('配信URLまたは動画IDを入力してください')
+    const target = parseYouTubeTarget(this.options.target)
+    if (target.liveChatId) return target.liveChatId
+    const videoId = target.videoId ?? (target.channelPath ? await findLiveVideoId(target.channelPath) : null)
+    if (!videoId) throw new FatalStreamError(target.channelPath ? 'このチャンネルは配信中ではありません' : '配信URLまたは動画IDを入力してください')
     const res = await fetch(`${API}/videos?part=liveStreamingDetails&id=${videoId}`, { headers: this.headers })
     const json = (await res.json()) as { items?: { liveStreamingDetails?: { activeLiveChatId?: string } }[]; error?: { message: string } }
     if (!res.ok) throw new FatalStreamError(`YouTube API: ${json.error?.message ?? res.status}`)

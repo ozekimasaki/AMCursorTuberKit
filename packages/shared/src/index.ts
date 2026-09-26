@@ -6,6 +6,7 @@ export * from './providers'
 export * from './runtime'
 export * from './secrets'
 export * from './api'
+export * from './bridge'
 
 export function uid(prefix = ''): string {
   const rand = Math.random().toString(36).slice(2, 10)

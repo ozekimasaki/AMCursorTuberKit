@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { mapKickWebhook } from '@amctk/stream-kick'
+import { createKickChatroomResolver, mapKickPusherEvent, mapKickWebhook, normalizeKickSlug } from '@amctk/stream-kick'
+import { FatalStreamError } from '@amctk/stream-core'
 import { normalizeTikTokBridgeMessage } from '@amctk/stream-tiktok'
-import { mapTwitchEvent } from '@amctk/stream-twitch'
+import { mapTwitchEvent, mapTwitchIrcMessage, mapTwitchIrcNotice, normalizeTwitchLogin } from '@amctk/stream-twitch'
 import { mapYouTubeItem, parseYouTubeTarget } from '@amctk/stream-youtube'
 import { JsonObjectStreamParser } from '@amctk/stream-core'
 
@@ -20,6 +21,13 @@ describe('YouTube', () => {
     expect(parseYouTubeTarget('https://youtube.com/live/abcdefghijk')).toEqual({ videoId: 'abcdefghijk' })
     expect(parseYouTubeTarget('abcdefghijk')).toEqual({ videoId: 'abcdefghijk' })
     expect(parseYouTubeTarget('Cg0KC2FiY2RlZmdoaWpr')).toEqual({ liveChatId: 'Cg0KC2FiY2RlZmdoaWpr' })
+  })
+
+  it('チャンネル（@ハンドル / チャンネルURL / チャンネルID）を判別する', () => {
+    expect(parseYouTubeTarget('@weathernews')).toEqual({ channelPath: '@weathernews' })
+    expect(parseYouTubeTarget('https://www.youtube.com/@weathernews/live')).toEqual({ channelPath: '@weathernews' })
+    expect(parseYouTubeTarget('https://www.youtube.com/channel/UCNsidkYpIAQ4QaufptQBPHQ')).toEqual({ channelPath: 'channel/UCNsidkYpIAQ4QaufptQBPHQ' })
+    expect(parseYouTubeTarget('UCNsidkYpIAQ4QaufptQBPHQ')).toEqual({ channelPath: 'channel/UCNsidkYpIAQ4QaufptQBPHQ' })
   })
 
   it('スーパーチャットを共通イベントへ正規化する', () => {
@@ -47,6 +55,31 @@ describe('Twitch', () => {
   })
 })
 
+describe('Twitch（ログイン不要）', () => {
+  const user = { userId: '9', userName: 'kuma', displayName: 'Kuma', isMod: true, isSubscriber: false, isBroadcaster: false }
+
+  it('チャンネル名はURLや # 付きでも受け付ける', () => {
+    expect(normalizeTwitchLogin('https://www.twitch.tv/Kato_Junichi0817?tab=about')).toBe('kato_junichi0817')
+    expect(normalizeTwitchLogin(' #xqc ')).toBe('xqc')
+  })
+
+  it('Cheer 付きのメッセージを cheer として扱う', () => {
+    expect(mapTwitchIrcMessage({ id: 'a', text: 'Cheer100 がんば', bits: 100, user })).toMatchObject({
+      id: 'tw:a',
+      kind: 'cheer',
+      amount: { value: 100, currency: 'bits' },
+      viewer: { platformUserId: '9', displayName: 'Kuma', isModerator: true },
+    })
+    expect(mapTwitchIrcMessage({ id: 'b', text: 'やあ', bits: 0, user }).kind).toBe('chat')
+  })
+
+  it('サブスク・ギフト・レイドを正規化する', () => {
+    expect(mapTwitchIrcNotice('s', user, { type: 'sub', months: 3 })).toMatchObject({ id: 'tw:s', kind: 'subscribe', text: 'サブスクしました（3か月）' })
+    expect(mapTwitchIrcNotice('g', user, { type: 'gift', count: 5 })).toMatchObject({ kind: 'gift', text: 'サブスクを5件ギフト' })
+    expect(mapTwitchIrcNotice('r', user, { type: 'raid', viewers: 120 })).toMatchObject({ kind: 'raid', text: '120人でレイドしました' })
+  })
+})
+
 describe('Kick', () => {
   it('chat.message.sent を正規化する', () => {
     const e = mapKickWebhook(
@@ -56,6 +89,73 @@ describe('Kick', () => {
     )
     expect(e).toMatchObject({ kind: 'chat', text: 'やっほー', viewer: { platformUserId: '5', displayName: 'kicker', isMember: true } })
     expect(mapKickWebhook('unknown.event', {}, '')).toBeNull()
+  })
+})
+
+describe('Kick（APIキー不要）', () => {
+  it('チャンネル名はURLでも受け付ける', () => {
+    expect(normalizeKickSlug('https://kick.com/XQC?tab=vods')).toBe('xqc')
+  })
+
+  it('Pusher の ChatMessageEvent を正規化し、エモート表記を読みやすくする', () => {
+    const e = mapKickPusherEvent('App\\Events\\ChatMessageEvent', {
+      id: 'uuid-1',
+      chatroom_id: 668,
+      content: 'やっほー [emote:37226:KEKW]',
+      type: 'message',
+      created_at: '2026-09-26T00:00:00Z',
+      sender: {
+        id: 5,
+        username: 'kicker',
+        slug: 'kicker',
+        identity: { color: '#ffffff', badges: [{ type: 'subscriber', text: 'Subscriber', count: 3 }, { type: 'moderator', text: 'Moderator' }] },
+      },
+      metadata: { message_ref: '1' },
+    })
+    expect(e).toMatchObject({
+      id: 'kick:uuid-1',
+      kind: 'chat',
+      text: 'やっほー :KEKW:',
+      viewer: { platformUserId: '5', displayName: 'kicker', isMember: true, isModerator: true, isOwner: false },
+    })
+  })
+
+  it('サブスク・ギフト・ホストを正規化し、使わないイベントは null', () => {
+    expect(mapKickPusherEvent('App\\Events\\SubscriptionEvent', { chatroom_id: 1, username: 'fan', months: 2 })).toMatchObject({
+      kind: 'subscribe',
+      text: 'サブスクしました（2か月）',
+      viewer: { displayName: 'fan' },
+    })
+    expect(mapKickPusherEvent('App\\Events\\GiftedSubscriptionsEvent', { chatroom_id: 1, gifted_usernames: ['a', 'b'], gifter_username: 'santa' })).toMatchObject({
+      kind: 'gift',
+      text: 'サブスクを2件ギフト',
+    })
+    expect(mapKickPusherEvent('App\\Events\\StreamHostEvent', { chatroom_id: 1, host_username: 'friend', number_viewers: 30, optional_message: '' })).toMatchObject({
+      kind: 'raid',
+      text: '30人でホストしました',
+    })
+    expect(mapKickPusherEvent('App\\Events\\MessageDeletedEvent', { id: 'x', message: { id: 'y' } })).toBeNull()
+  })
+
+  it('チャットルームIDは渡された fetch で調べ、同じチャンネルは再取得しない', async () => {
+    const urls: string[] = []
+    const resolve = createKickChatroomResolver(async (url) => {
+      urls.push(url)
+      return new Response(JSON.stringify({ id: 1, chatroom: { id: 668 } }), { status: 200 })
+    })
+    expect(await resolve('xqc')).toBe(668)
+    expect(await resolve('xqc')).toBe(668)
+    expect(urls).toEqual(['https://kick.com/api/v2/channels/xqc'])
+  })
+
+  it('存在しないチャンネルは再試行しないエラー、Cloudflare の 403 は再試行するエラーにする', async () => {
+    const notFound = createKickChatroomResolver(async () => new Response('', { status: 404 }))
+    await expect(notFound('nobody')).rejects.toBeInstanceOf(FatalStreamError)
+    const blocked = createKickChatroomResolver(async () => new Response('', { status: 403 }))
+    const err = await blocked('xqc').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect(err).not.toBeInstanceOf(FatalStreamError)
+    expect(String(err)).toContain('チャットルームID')
   })
 })
 

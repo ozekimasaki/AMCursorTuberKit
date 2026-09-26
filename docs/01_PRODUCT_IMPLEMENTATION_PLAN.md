@@ -139,13 +139,14 @@ TTSはProvider Interfaceで抽象化し、Avatar側はTTS製品名を知らな�
 
 ## 7. Stream Source対応
 
-| Platform | Status | 取得経路 |
+| Platform | 既定の取得経路（APIキー不要） | 公式APIの取得経路（設定で切替） |
 |---|---|---|
-| YouTube | Stable | YouTube Live Streaming API `streamList` |
-| Twitch | Stable | EventSub WebSocket |
-| Kick | Beta | Official Webhook + Cloud Relay |
-| TikTok | Experimental | Provider差し替え式。公式対応可能性を継続調査 |
+| YouTube | Beta: Web版と同じ InnerTube（youtubei.js）。チャンネル指定で配信中の枠を自動検出 | Stable: YouTube Live Streaming API `streamList` |
+| Twitch | Stable: 匿名IRC（@twurple/chat）。フォロー通知は取れない | Stable: EventSub WebSocket |
+| Kick | Beta: Web版と同じ Pusher WebSocket。チャットルームIDは Electron の通信処理で取得 | Beta: Official Webhook + Cloud Relay |
+| TikTok | Experimental: Provider差し替え式。公式対応可能性を継続調査 | — |
 
+YouTube / Kick の既定経路は各サービスの Web 版が内部で使う仕組みのため、仕様変更で止まる可能性がある。止まった場合は利用者が公式APIへ手動で切り替える（自動切替はしない）。
 TikTokは一般開発者向けLIVEコメント読取経路が明確でないため、Stable扱いにしない。
 
 ## 8. コメント選択
