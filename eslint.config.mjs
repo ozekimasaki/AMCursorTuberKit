@@ -4,6 +4,9 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
+const ELECTRON_BOUNDARY =
+  'Electron の API は apps/desktop/src/main/host/electron/ と preload だけで使います。必要な機能は host/types.ts の DesktopHost に追加してください（AGENTS.md「デスクトップ基盤の境界」）。'
+
 export default defineConfig([
   { ignores: ['**/node_modules/**', '**/out/**', '**/release/**', '**/dist/**', '**/.wrangler/**', '.agents/**', '.pi/**'] },
   js.configs.recommended,
@@ -14,6 +17,18 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  // デスクトップ基盤の境界：基盤（Electron）を差し替えられるよう、Electron への依存を1か所に閉じ込める
+  {
+    files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}', 'workers/**/*.ts'],
+    ignores: ['apps/desktop/src/main/host/electron/**', 'apps/desktop/src/preload/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { paths: [{ name: 'electron', message: ELECTRON_BOUNDARY }], patterns: [{ group: ['electron/*'], message: ELECTRON_BOUNDARY }] },
+      ],
+      'no-restricted-syntax': ['error', { selector: "TSQualifiedName[left.name='Electron']", message: ELECTRON_BOUNDARY }],
     },
   },
   {

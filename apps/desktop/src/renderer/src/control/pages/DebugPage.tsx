@@ -57,7 +57,7 @@ function HealthCard() {
         {info && (
           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-2xs text-muted-foreground">
             <span>Version {info.version}</span>
-            <span>Electron {info.electron}</span>
+            <span>{info.host}</span>
             <span>Node {info.node}</span>
             <span>{info.platform}</span>
             <span className="col-span-2 truncate">データ: {info.userData}</span>

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { CopyIcon, ExternalLinkIcon, FlaskConicalIcon, LogInIcon, PlugIcon, UnplugIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import type { StreamPlatform, StreamSourceHealth, TwitchDeviceLogin } from '@amctk/shared'
+import type { StreamPlatform, StreamSource, StreamSourceHealth, TwitchDeviceLogin } from '@amctk/shared'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api } from '@/lib/api'
 import { useRuntime, useSettings, useStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -92,6 +93,40 @@ function PlatformCard({
   )
 }
 
+/** チャンネルURLが貼られていても slug だけにする */
+const kickSlugOf = (input: string) => input.replace(/^https?:\/\/(?:www\.)?kick\.com\//i, '').split(/[/?#]/)[0]
+
+/** 取得経路の切り替え。web はAPIキー不要、api は公式API */
+function SourceToggle({
+  value,
+  onChange,
+  apiHint,
+  note,
+}: {
+  value: StreamSource
+  onChange: (v: StreamSource) => void
+  apiHint: string
+  note: string
+}) {
+  const item = 'h-auto flex-col items-start gap-0.5 whitespace-normal rounded-2xl px-3.5 py-3 text-left'
+  return (
+    <Field>
+      <FieldLabel>取得方法</FieldLabel>
+      <ToggleGroup value={[value]} onValueChange={(v) => v[0] && onChange(v[0] as StreamSource)} variant="outline" className="grid w-full grid-cols-2 gap-2">
+        <ToggleGroupItem value="web" className={item}>
+          <span className="text-sm font-extrabold">かんたん接続</span>
+          <span className="text-2xs font-medium opacity-75">APIキー・ログイン不要</span>
+        </ToggleGroupItem>
+        <ToggleGroupItem value="api" className={item}>
+          <span className="text-sm font-extrabold">公式API</span>
+          <span className="text-2xs font-medium opacity-75">{apiHint}</span>
+        </ToggleGroupItem>
+      </ToggleGroup>
+      <FieldDescription>{value === 'web' ? note : '接続中に切り替えると、新しい方法でつなぎ直します'}</FieldDescription>
+    </Field>
+  )
+}
+
 function TwitchLogin() {
   const hasToken = useStore((s) => s.secrets?.twitchAccessToken ?? false)
   const [login, setLogin] = useState<TwitchDeviceLogin | null>(null)
@@ -154,49 +189,115 @@ export function StreamsPage() {
   const sel = s.selector
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2">
-      <PlatformCard platform="youtube" title="YouTube Live" description="Live Streaming API（streamList → 使えない場合はポーリング）">
-        <SecretField secret="youtubeApiKey" description="Google Cloud Console で YouTube Data API v3 を有効にして発行します。" />
+      <PlatformCard
+        platform="youtube"
+        title="YouTube Live"
+        description={
+          s.youtube.source === 'web' ? 'YouTube の Web 版と同じ仕組み（InnerTube）でコメントを受信します' : 'Live Streaming API（streamList → 使えない場合はポーリング）'
+        }
+      >
+        <SourceToggle
+          value={s.youtube.source}
+          onChange={(source) => update({ stream: { youtube: { source } } })}
+          apiHint="Data API v3・APIキーが必要"
+          note="YouTube 側の仕様変更で受信できなくなった場合は「公式API」に切り替えてください"
+        />
+        {s.youtube.source === 'api' && <SecretField secret="youtubeApiKey" description="Google Cloud Console で YouTube Data API v3 を有効にして発行します。" />}
         <Field>
-          <FieldLabel htmlFor="yt-target">配信URL または 動画ID</FieldLabel>
+          <FieldLabel htmlFor="yt-target">チャンネルURL・配信URL・動画ID</FieldLabel>
           <Input
             id="yt-target"
-            placeholder="https://www.youtube.com/watch?v=..."
+            placeholder="https://www.youtube.com/@your_channel"
             value={s.youtube.target}
             onChange={(e) => update({ stream: { youtube: { target: e.target.value } } })}
           />
-          <FieldDescription>配信が始まってから接続してください。liveChatId を直接入れることもできます</FieldDescription>
+          <FieldDescription>
+            {s.youtube.source === 'web'
+              ? 'チャンネル（@ハンドル）を入れておくと配信中の枠を自動で探し、配信前なら始まるまで待って接続します'
+              : 'チャンネルを入れた場合は配信中の枠を探します。liveChatId を直接入れることもできます'}
+          </FieldDescription>
         </Field>
       </PlatformCard>
 
-      <PlatformCard platform="twitch" title="Twitch" description="EventSub WebSocket でチャットを受信します">
-        <Field>
-          <FieldLabel htmlFor="tw-client">Client ID</FieldLabel>
-          <Input id="tw-client" value={s.twitch.clientId} onChange={(e) => update({ stream: { twitch: { clientId: e.target.value.trim() } } })} />
-          <FieldDescription>
-            Twitch Developer Console でアプリを「Public」クライアントとして登録し、Device Code Grant を有効にします。
-            <button type="button" className="font-bold text-primary hover:underline" onClick={() => void api.app.openExternal('https://dev.twitch.tv/console/apps')}>
-              開く <ExternalLinkIcon className="inline size-3" />
-            </button>
-          </FieldDescription>
-        </Field>
+      <PlatformCard
+        platform="twitch"
+        title="Twitch"
+        description={s.twitch.source === 'web' ? 'Web 版のチャット欄と同じ IRC に匿名で接続してコメントを受信します' : 'EventSub WebSocket でチャットを受信します'}
+      >
+        <SourceToggle
+          value={s.twitch.source}
+          onChange={(source) => update({ stream: { twitch: { source } } })}
+          apiHint="EventSub・ログインが必要"
+          note="読み取り専用の接続です。フォロー通知は取得できません"
+        />
+        {s.twitch.source === 'api' && (
+          <Field>
+            <FieldLabel htmlFor="tw-client">Client ID</FieldLabel>
+            <Input id="tw-client" value={s.twitch.clientId} onChange={(e) => update({ stream: { twitch: { clientId: e.target.value.trim() } } })} />
+            <FieldDescription>
+              Twitch Developer Console でアプリを「Public」クライアントとして登録し、Device Code Grant を有効にします。
+              <button type="button" className="font-bold text-primary hover:underline" onClick={() => void api.app.openExternal('https://dev.twitch.tv/console/apps')}>
+                開く <ExternalLinkIcon className="inline size-3" />
+              </button>
+            </FieldDescription>
+          </Field>
+        )}
         <Field>
           <FieldLabel htmlFor="tw-channel">チャンネル名</FieldLabel>
           <Input id="tw-channel" placeholder="your_channel" value={s.twitch.channelLogin} onChange={(e) => update({ stream: { twitch: { channelLogin: e.target.value.trim() } } })} />
+          <FieldDescription>twitch.tv/ の後ろの部分です。チャンネルのURLをそのまま貼っても構いません</FieldDescription>
         </Field>
-        <TwitchLogin />
+        {s.twitch.source === 'api' && <TwitchLogin />}
       </PlatformCard>
 
-      <PlatformCard platform="kick" title="Kick" description="公式Webhookを Cloud Relay（Cloudflare Worker）経由で受け取ります">
-        <Field>
-          <FieldLabel htmlFor="kick-relay">Relay URL</FieldLabel>
-          <Input id="kick-relay" placeholder="https://amctk-relay.xxxx.workers.dev" value={s.kick.relayUrl} onChange={(e) => update({ stream: { kick: { relayUrl: e.target.value.trim() } } })} />
-          <FieldDescription>workers/stream-relay をデプロイし、Kick の Webhook URL に「Relay URL + /webhook」を設定します</FieldDescription>
-        </Field>
+      <PlatformCard
+        platform="kick"
+        title="Kick"
+        description={s.kick.source === 'web' ? 'Kick の Web 版と同じ仕組み（Pusher）でコメントを受信します' : '公式Webhookを Cloud Relay（Cloudflare Worker）経由で受け取ります'}
+      >
+        <SourceToggle
+          value={s.kick.source}
+          onChange={(source) => update({ stream: { kick: { source } } })}
+          apiHint="Webhook・Relayの用意が必要"
+          note="Kick 側の仕様変更で受信できなくなった場合は「公式API」に切り替えてください"
+        />
+        {s.kick.source === 'api' && (
+          <Field>
+            <FieldLabel htmlFor="kick-relay">Relay URL</FieldLabel>
+            <Input id="kick-relay" placeholder="https://amctk-relay.xxxx.workers.dev" value={s.kick.relayUrl} onChange={(e) => update({ stream: { kick: { relayUrl: e.target.value.trim() } } })} />
+            <FieldDescription>workers/stream-relay をデプロイし、Kick の Webhook URL に「Relay URL + /webhook」を設定します</FieldDescription>
+          </Field>
+        )}
         <Field>
           <FieldLabel htmlFor="kick-slug">チャンネル</FieldLabel>
-          <Input id="kick-slug" value={s.kick.channelSlug} onChange={(e) => update({ stream: { kick: { channelSlug: e.target.value.trim() } } })} />
+          <Input id="kick-slug" placeholder="your_channel" value={s.kick.channelSlug} onChange={(e) => update({ stream: { kick: { channelSlug: e.target.value.trim() } } })} />
+          <FieldDescription>kick.com/ の後ろの部分です。チャンネルのURLをそのまま貼っても構いません</FieldDescription>
         </Field>
-        <SecretField secret="kickRelaySecret" description="Worker の RELAY_SECRET と同じ値を入れます。" />
+        {s.kick.source === 'api' && <SecretField secret="kickRelaySecret" description="Worker の RELAY_SECRET と同じ値を入れます。" />}
+        {s.kick.source === 'web' && (
+          <Field>
+            <FieldLabel htmlFor="kick-chatroom">チャットルームID（通常は空欄）</FieldLabel>
+            <Input
+              id="kick-chatroom"
+              inputMode="numeric"
+              placeholder="自動で取得します"
+              value={s.kick.chatroomId}
+              onChange={(e) => update({ stream: { kick: { chatroomId: e.target.value.replace(/\D/g, '') } } })}
+            />
+            <FieldDescription>
+              自動取得に失敗するときだけ入力します。ブラウザでチャンネル情報を開き、chatroom の id の数字を入れてください。
+              {s.kick.channelSlug && (
+                <button
+                  type="button"
+                  className="font-bold text-primary hover:underline"
+                  onClick={() => void api.app.openExternal(`https://kick.com/api/v2/channels/${encodeURIComponent(kickSlugOf(s.kick.channelSlug))}`)}
+                >
+                  開く <ExternalLinkIcon className="inline size-3" />
+                </button>
+              )}
+            </FieldDescription>
+          </Field>
+        )}
       </PlatformCard>
 
       <PlatformCard platform="tiktok" title="TikTok LIVE" description="外部ブリッジ（TikFinity 等）のWebSocketを受け取ります">

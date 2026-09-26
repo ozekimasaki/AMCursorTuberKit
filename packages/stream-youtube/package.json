@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@amctk/shared": "workspace:*",
-    "@amctk/stream-core": "workspace:*"
+    "@amctk/stream-core": "workspace:*",
+    "youtubei.js": "^18.1.0"
   }
 }

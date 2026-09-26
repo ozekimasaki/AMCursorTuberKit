@@ -49,7 +49,7 @@ pnpm dist:win
 | ボイス | エンジン選択、話者、速さ・高さ・抑揚・音量、気分を声に反映 |
 | AI・性格 | Cursor SDK 接続、モデル選択、Web検索のオン／オフ、呼び出し回数の上限、キャラクター設定（初期値に戻す）、七つの大罪の本来の値・戻る速さ・1回の最大変化量 |
 | 記憶 | ローカル（SQLite）/ Cloudflare Agent Memory、視聴者ごとの記憶の確認・追加・削除 |
-| 配信サービス | YouTube Live（Stable）/ Twitch（Stable）/ Kick（Beta）/ TikTok LIVE（Experimental）、コメントの選び方 |
+| 配信サービス | YouTube Live / Twitch / Kick（APIキー不要の「かんたん接続」と「公式API」を切り替え）/ TikTok LIVE（Experimental）、コメントの選び方 |
 | デバッグ | 動作状況の再チェック、内部状態の手動操作、テーマ、ログ・イベント |
 
 ## 処理の流れ
@@ -87,18 +87,22 @@ pnpm dist:win
 - Cursor API Key・Cloudflare API Token・Twitch/YouTube/Kick の認証情報は Main Process の `SecretService` だけが保持し、OSの暗号化ストレージ（Windows: DPAPI）で暗号化して保存します。Renderer には「設定済みかどうか」だけを返します
 - ログは構造化（JSON Lines）で、トークンらしき文字列は自動で伏せ字にします
 - Renderer は `contextIsolation` + `sandbox` 有効。アバター素材はアプリのフォルダへコピーし、`amctk-asset://` 経由でのみ読み込みます（それ以外のパスは読めません）
-- YouTube の API Key はURLではなくヘッダーで送ります
+- YouTube の API Key はURLではなくヘッダーで送ります（公式APIを選んだ場合）
 
 ## 配信サービスの設定
 
-| サービス | 必要なもの |
-| --- | --- |
-| YouTube Live | YouTube Data API v3 の API Key、配信URL（または動画ID / liveChatId）。`streamList` で受信し、使えない場合はポーリングへ自動で切り替えます |
-| Twitch | Developer Console で「Public」クライアントとして登録した Client ID（Device Code Grant を有効化）、チャンネル名。「Twitchでログイン」でコードを入力します（Client Secret 不要） |
-| Kick | [workers/stream-relay](workers/stream-relay) を Cloudflare にデプロイし、Kick の Webhook URL に `https://<worker>/webhook` を設定。アプリには Relay URL と Relay Secret を入力します |
-| TikTok LIVE | TikFinity などのブリッジが流す WebSocket（既定 `ws://127.0.0.1:21213`）を受け取ります。公式な取得手段が明確でないため Experimental 扱いです |
+YouTube / Twitch / Kick は「取得方法」を選べます。既定は **かんたん接続** で、チャンネルを入れて「接続」を押すだけで受信できます。
 
-Kick Relay のデプロイ:
+| サービス | かんたん接続（既定・APIキー不要） | 公式API |
+| --- | --- | --- |
+| YouTube Live | チャンネルURL（`@ハンドル`）か配信URL・動画ID。Web版と同じ InnerTube を [youtubei.js](https://github.com/LuanRT/YouTube.js) で読みます。チャンネル指定なら配信中の枠を自動で探し、配信前なら始まるまで待ちます。クォータ制限はありません（Beta） | YouTube Data API v3 の API Key。`streamList` で受信し、使えない場合はポーリングへ自動で切り替えます（1日のクォータに上限があります） |
+| Twitch | チャンネル名かチャンネルURL。Web版チャットと同じ IRC に匿名で接続します（[@twurple/chat](https://github.com/twurple/twurple)）。読み取り専用で、フォロー通知は取れません | Developer Console で「Public」クライアントとして登録した Client ID（Device Code Grant を有効化）。「Twitchでログイン」でコードを入力します（Client Secret 不要） |
+| Kick | チャンネル名かチャンネルURL。Web版と同じ Pusher WebSocket を購読します。チャットルームIDは Electron（Chromium）の通信処理で自動取得し、失敗するときだけ手動で入力します（Beta） | [workers/stream-relay](workers/stream-relay) を Cloudflare にデプロイし、Kick の Webhook URL に `https://<worker>/webhook` を設定。アプリには Relay URL と Relay Secret を入力します |
+| TikTok LIVE | — | TikFinity などのブリッジが流す WebSocket（既定 `ws://127.0.0.1:21213`）を受け取ります。公式な取得手段が明確でないため Experimental 扱いです |
+
+かんたん接続は各サービスの Web 版が内部で使っている仕組みを利用するため、仕様変更で受信できなくなることがあります。その場合は「公式API」に切り替えてください（接続中に切り替えると、新しい方法でつなぎ直します）。
+
+Kick Relay のデプロイ（Kick を公式APIで使う場合のみ）:
 
 ```bash
 cd workers/stream-relay
@@ -140,8 +144,8 @@ AMCTK_SMOKE=./smoke-out AMCTK_USER_DATA=./smoke-profile npx electron .
 ### 構成
 
 ```text
-apps/desktop            Electron アプリ（main / preload / renderer: control・stage）
-packages/shared         型・設定スキーマ（Zod）・IPC API 定義
+apps/desktop            Electron アプリ（main / preload / renderer: control・stage）。Electron の API は main/host/electron だけで使う
+packages/shared         型・設定スキーマ（Zod）・IPC API 定義・Renderer ↔ Main の通信の取り決め（bridge）
 packages/core           EventBus / SevenSinsEngine / InteractionSelector / SentenceSegmenter / メタ情報パーサー
 packages/personality    状態 → プロンプト・声色・動きへの変換
 packages/agent          Cursor SDK Agent（Custom Tool）/ デモ応答
@@ -150,10 +154,12 @@ packages/audio          TTS Provider（VOICEVOX互換・HTTP汎用・OS標準）
 packages/stream-*       YouTube / Twitch / Kick / TikTok Adapter
 packages/avatar-*       組み込み / PNG / MotionPNG / PuruPuru / VRM / Live2D Adapter
 packages/ui             デザイントークン（tokens.css）
-workers/stream-relay    Kick Webhook 中継（Cloudflare Worker + Durable Object）
+workers/stream-relay    Kick Webhook 中継（Cloudflare Worker + Durable Object。Kick を公式APIで使う場合のみ）
 ```
 
 UI は shadcn/ui（Base UI）+ Tailwind CSS v4。色・角丸・動きのカーブは [packages/ui/src/tokens.css](packages/ui/src/tokens.css) のトークンから使います。
+
+デスクトップ基盤（Electron）への依存は `apps/desktop/src/main/host/` の `DesktopHost` にまとめ、基盤を差し替えられるようにしています。ルールと Electrobun の再検討条件は [AGENTS.md](AGENTS.md) を参照してください。
 
 ### データの保存場所
 

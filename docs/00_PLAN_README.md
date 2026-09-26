@@ -36,9 +36,9 @@ AMCursorTuberKit は、単純な「LLM + TTS + アバター表示」ではなく
 
 ### Stream Source
 
-- YouTube Live: Official
-- Twitch: Official
-- Kick: Official Webhook + Cloud Relay
+- YouTube Live: Web（InnerTube / youtubei.js、既定）/ Official（Data API）
+- Twitch: Web（匿名IRC / @twurple/chat、既定）/ Official（EventSub）
+- Kick: Web（Pusher、既定）/ Official Webhook + Cloud Relay
 - TikTok LIVE: Experimental
 
 ### Stage

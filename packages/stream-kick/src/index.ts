@@ -1,6 +1,9 @@
 import type { StreamEvent } from '@amctk/shared'
 import { BaseStreamAdapter, FatalStreamError, type StreamLogger } from '@amctk/stream-core'
 
+export * from './chatroom'
+export * from './pusher'
+
 export interface KickOptions {
   /** 例: wss://amctk-relay.<account>.workers.dev */
   relayUrl: string
@@ -9,7 +12,8 @@ export interface KickOptions {
 }
 
 /**
- * Kick公式Webhookは公開URLが必要なため、Cloudflare Worker (workers/stream-relay) で受けて
+ * Kick（公式API）
+ * 公式Webhookは公開URLが必要なため、Cloudflare Worker (workers/stream-relay) で受けて
  * WebSocketでアプリへ中継する。Relayが落ちてもKickだけがDegradedになる。
  */
 export class KickRelayAdapter extends BaseStreamAdapter {

@@ -1,6 +1,8 @@
 import type { StreamEvent, StreamEventKind } from '@amctk/shared'
 import { BaseStreamAdapter, FatalStreamError, type StreamLogger } from '@amctk/stream-core'
 
+export * from './irc'
+
 const EVENTSUB_WS = 'wss://eventsub.wss.twitch.tv/ws'
 const HELIX = 'https://api.twitch.tv/helix'
 const ID = 'https://id.twitch.tv/oauth2'
@@ -82,7 +84,7 @@ export async function refreshTwitchToken(clientId: string, refreshToken: string)
   return { accessToken: String(json.access_token), refreshToken: String(json.refresh_token ?? refreshToken) }
 }
 
-/* ---------------- EventSub WebSocket ---------------- */
+/* ---------------- EventSub WebSocket（公式API） ---------------- */
 
 interface EventSubMessage {
   metadata: { message_type: string; subscription_type?: string; message_id: string }

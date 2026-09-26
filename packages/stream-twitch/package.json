@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@amctk/shared": "workspace:*",
-    "@amctk/stream-core": "workspace:*"
+    "@amctk/stream-core": "workspace:*",
+    "@twurple/chat": "^8.2.0"
   }
 }

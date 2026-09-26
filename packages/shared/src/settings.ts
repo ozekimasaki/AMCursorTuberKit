@@ -189,17 +189,27 @@ export const stageSchema = z.object({
   alwaysOnTop: z.boolean().default(false),
 })
 
+/**
+ * コメントの取得経路。
+ * web: 各サービスのWeb版チャット欄と同じ経路（APIキー・ログイン不要。仕様変更で止まることがある）
+ * api: 公式API（APIキーやログイン、Relayの用意が必要）
+ */
+export const streamSourceSchema = z.enum(['web', 'api'])
+export type StreamSource = z.infer<typeof streamSourceSchema>
+
 export const streamSchema = z.object({
   youtube: z
     .object({
       enabled: z.boolean().default(false),
-      /** 配信URL / 動画ID / liveChatId のいずれか */
+      source: streamSourceSchema.default('web'),
+      /** 配信URL / 動画ID / チャンネルURL（@ハンドル） / liveChatId のいずれか */
       target: z.string().default(''),
     })
     .default({}),
   twitch: z
     .object({
       enabled: z.boolean().default(false),
+      source: streamSourceSchema.default('web'),
       clientId: z.string().default(''),
       channelLogin: z.string().default(''),
     })
@@ -207,8 +217,11 @@ export const streamSchema = z.object({
   kick: z
     .object({
       enabled: z.boolean().default(false),
+      source: streamSourceSchema.default('web'),
       relayUrl: z.string().default(''),
       channelSlug: z.string().default(''),
+      /** web 経路でチャットルームIDを自動取得できないときの手動指定 */
+      chatroomId: z.string().default(''),
     })
     .default({}),
   tiktok: z

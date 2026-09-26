@@ -103,6 +103,8 @@ Renderer: Stage Window
 
 Stage RendererはControl UIの依存を極力持たない。
 
+Main Process のサービスと IPC Router は Electron に直接依存しない。ウィンドウ・IPC・ダイアログ・暗号化ストレージ・独自スキーム・ブラウザエンジン経由の fetch は `DesktopHost`（apps/desktop/src/main/host/types.ts）を通して使い、Electron 実装は host/electron/ に置く。Renderer との通信の取り決めは packages/shared/src/bridge.ts にまとめ、preload はその送受信だけを担う。基盤の差し替え条件は AGENTS.md に記載する。
+
 ## 5. Canonical State
 
 状態を3種類に分離する。
