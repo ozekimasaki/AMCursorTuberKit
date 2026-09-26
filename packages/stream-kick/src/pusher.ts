@@ -1,5 +1,6 @@
 import type { StreamEvent, StreamViewer } from '@amctk/shared'
 import { BaseStreamAdapter, FatalStreamError, type StreamLogger } from '@amctk/stream-core'
+import { normalizeKickSlug } from './slug'
 
 /** Kick の Web 版が使っている Pusher の接続先。公開仕様ではないため、変わったらここを更新する */
 const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0&flash=false'
@@ -20,24 +21,20 @@ const IGNORED_EVENTS = new Set(
 )
 
 export interface KickPusherOptions {
-  /** チャンネル名 / チャンネルURL */
+  /** チャンネル名 / チャンネルURL。接続（再試行）のたびに読み直す */
   channelSlug: string
-  /** 手動で指定したチャットルームID。無ければ resolveChatroomId で調べる */
+  /** 手動で指定したチャットルームID。無ければ resolveChatroomId で調べる。接続（再試行）のたびに読み直す */
   chatroomId?: number
   /** slug からチャットルームIDを調べる。Kick の API は Cloudflare に保護されているため、呼び出し側（Electron）で実装する */
   resolveChatroomId(slug: string): Promise<number>
+  /** ユーザー名から数値のユーザーIDを調べる（サブスク・ギフト・ホストの視聴者IDをチャットとそろえる）。調べられなければ undefined */
+  resolveUserId?(username: string): Promise<number | undefined>
 }
 
 type Obj = Record<string, unknown>
 
-export function normalizeKickSlug(input: string): string {
-  return input
-    .trim()
-    .replace(/^https?:\/\/(?:www\.)?kick\.com\//i, '')
-    .replace(/^@/, '')
-    .split(/[/?#]/)[0]
-    .toLowerCase()
-}
+/** チャットで見たユーザー名 → ID を覚えておく数の上限（長時間の配信でも増え続けないようにする） */
+const MAX_KNOWN_USERS = 5000
 
 /**
  * Kick チャット（APIキー不要）
@@ -49,8 +46,9 @@ export class KickPusherAdapter extends BaseStreamAdapter {
   protected readonly stability = 'beta' as const
   private ws?: WebSocket
   private watchdog?: ReturnType<typeof setInterval>
-  private chatroomId?: number
   private unknownEvents = new Set<string>()
+  /** チャットで見たユーザー名（小文字）→ 数値のユーザーID */
+  private userIds = new Map<string, string>()
 
   constructor(
     private options: KickPusherOptions,
@@ -62,8 +60,11 @@ export class KickPusherAdapter extends BaseStreamAdapter {
   protected async open() {
     const slug = normalizeKickSlug(this.options.channelSlug)
     if (!slug) throw new FatalStreamError('チャンネル名を入力してください')
-    this.chatroomId ??= this.options.chatroomId || (await this.options.resolveChatroomId(slug))
-    await this.listen(this.chatroomId, slug)
+    // 手動のIDは毎回読み直す（再試行の間に入力された値も使う）。自動で調べた結果は resolveChatroomId がキャッシュする
+    const chatroomId = this.options.chatroomId || (await this.options.resolveChatroomId(slug))
+    // 調べている間に切断されたら、接続しない
+    if (this.stopped) return
+    await this.listen(chatroomId, slug)
   }
 
   protected async close() {
@@ -124,10 +125,7 @@ export class KickPusherAdapter extends BaseStreamAdapter {
               const err = new FatalStreamError(
                 `Kick のチャットに接続できません（${code}）。仕様が変わった可能性があるため、公式APIへの切り替えを検討してください`,
               )
-              if (settled) {
-                this.stopped = true
-                this.setState('error', err.message)
-              }
+              if (settled) this.fail(err.message)
               abandon(err)
             }
             return
@@ -135,7 +133,7 @@ export class KickPusherAdapter extends BaseStreamAdapter {
         }
         if (msg.event.startsWith('pusher')) return
         const e = mapKickPusherEvent(msg.event, data)
-        if (e) this.emit(e)
+        if (e) void this.forward(e)
         else if (!IGNORED_EVENTS.has(msg.event) && !this.unknownEvents.has(msg.event)) {
           this.unknownEvents.add(msg.event)
           this.log('info', 'kick unknown event', { event: msg.event, keys: Object.keys(data) })
@@ -168,6 +166,35 @@ export class KickPusherAdapter extends BaseStreamAdapter {
     if (this.watchdog) clearInterval(this.watchdog)
     this.watchdog = undefined
   }
+
+  /**
+   * 視聴者IDを数値のユーザーIDにそろえてから流す（AGENTS.md「視聴者ID」）。
+   * サブスク・ギフト・ホストにはユーザー名しか無いので、チャットで見た ID を使い、無ければ resolveUserId で調べる。
+   * 調べられなければユーザー名のまま流す。
+   */
+  private async forward(e: StreamEvent) {
+    const name = e.viewer.displayName.toLowerCase()
+    if (e.kind === 'chat') {
+      if (/^\d+$/.test(e.viewer.platformUserId)) this.rememberUserId(name, e.viewer.platformUserId)
+      this.emit(e)
+      return
+    }
+    let id = this.userIds.get(name)
+    if (!id && name !== 'anonymous' && this.options.resolveUserId) {
+      const found = await this.options.resolveUserId(e.viewer.displayName).catch(() => undefined)
+      if (found) id = String(found)
+    }
+    this.emit(id ? { ...e, viewer: { ...e.viewer, platformUserId: id } } : e)
+  }
+
+  private rememberUserId(name: string, id: string) {
+    this.userIds.delete(name)
+    this.userIds.set(name, id)
+    if (this.userIds.size > MAX_KNOWN_USERS) {
+      const oldest = this.userIds.keys().next().value
+      if (oldest !== undefined) this.userIds.delete(oldest)
+    }
+  }
 }
 
 function safeJson(s: string): Obj | null {
@@ -179,6 +206,7 @@ function safeJson(s: string): Obj | null {
   }
 }
 
+/** ユーザー名しか分からない視聴者。KickPusherAdapter が数値のユーザーIDに直してから流す */
 function viewerByName(username: string): StreamViewer {
   return { platform: 'kick', platformUserId: username, displayName: username }
 }

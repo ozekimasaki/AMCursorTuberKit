@@ -126,19 +126,33 @@ export abstract class BaseStreamAdapter implements StreamSourceAdapter {
     this.setState('connected', message)
   }
 
+  /** 再試行しても直らない状態で止める。接続した後に分かった場合もサブクラスから呼ぶ */
+  protected fail(message: string) {
+    this.stopped = true
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.setState('error', message)
+  }
+
   private async tryOpen() {
     if (this.stopped) return
     this.setState('connecting')
     try {
       await this.open()
     } catch (err) {
+      // open() の途中で disconnect() された場合は、状態を切断のままにする
+      if (this.stopped) return
       const msg = err instanceof Error ? err.message : String(err)
       if (err instanceof FatalStreamError) {
-        this.stopped = true
-        this.setState('error', msg)
+        this.fail(msg)
         return
       }
       this.scheduleReconnect(msg)
+      return
+    }
+    // open() の途中で disconnect() された場合、open() が後から作った接続はここで閉じる（閉じないと誰も止められない）
+    if (this.stopped) {
+      await this.close().catch(() => undefined)
+      this.setState('disconnected')
     }
   }
 }

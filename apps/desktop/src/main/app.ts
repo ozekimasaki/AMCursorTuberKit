@@ -17,7 +17,7 @@ import {
   type StreamPlatform,
   type TTSProviderId,
 } from '@amctk/shared'
-import { createKickChatroomResolver } from '@amctk/stream-kick'
+import { createKickChatroomResolver, createKickUserIdResolver } from '@amctk/stream-kick'
 import { AssetService } from './asset-service'
 import { nodeVersionOk, runHealthCheck } from './health'
 import type { HostBoot, RendererRef } from './host/types'
@@ -83,8 +83,11 @@ export async function startApp(boot: HostBoot) {
     logger.scope('agent'),
     userData,
   )
+  // kick.com の API は Cloudflare に保護されているため、ブラウザエンジンの通信処理で調べる
+  const kickFetch = (url: string, init?: RequestInit) => host.browserFetch(url, init)
   const streams = new StreamSourceService(() => settings.get(), secrets, logger, {
-    resolveKickChatroomId: createKickChatroomResolver((url, init) => host.browserFetch(url, init)),
+    resolveKickChatroomId: createKickChatroomResolver(kickFetch),
+    resolveKickUserId: createKickUserIdResolver(kickFetch),
   })
 
   let health: HealthReport = { checkedAt: 0, items: [] }

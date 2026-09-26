@@ -3,6 +3,7 @@ import { BaseStreamAdapter, FatalStreamError, type StreamLogger } from '@amctk/s
 
 export * from './chatroom'
 export * from './pusher'
+export * from './slug'
 
 export interface KickOptions {
   /** 例: wss://amctk-relay.<account>.workers.dev */

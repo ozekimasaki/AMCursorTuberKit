@@ -301,8 +301,33 @@ export function migrateBuiltinLook(raw: unknown): unknown {
   return { ...r, avatar: { ...avatar, builtin: { ...builtin, palette: 'cocoa', revision: 2 } } }
 }
 
+/**
+ * 取得経路（source）が無い旧版の設定では、公式APIで使っていたサービスを 'api' のままにする。
+ * 旧版は公式APIしか無かったため、有効にしていたか公式API用の項目を入れていたら 'api' とみなす。
+ * 何も設定していなかったサービスは既定の 'web' になる（AGENTS.md「自動では切り替えません」）。
+ */
+export function migrateStreamSource(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw
+  const r = raw as Record<string, unknown>
+  const stream = r.stream as Record<string, unknown> | undefined
+  if (!stream || typeof stream !== 'object') return raw
+  const usedApi: Record<'youtube' | 'twitch' | 'kick', (p: Record<string, unknown>) => boolean> = {
+    youtube: (p) => p.enabled === true || !!p.target,
+    twitch: (p) => p.enabled === true || !!p.clientId,
+    kick: (p) => p.enabled === true || !!p.relayUrl,
+  }
+  let next: Record<string, unknown> | undefined
+  for (const [platform, used] of Object.entries(usedApi)) {
+    const p = stream[platform] as Record<string, unknown> | undefined
+    if (!p || typeof p !== 'object' || p.source !== undefined || !used(p)) continue
+    next ??= { ...stream }
+    next[platform] = { ...p, source: 'api' }
+  }
+  return next ? { ...r, stream: next } : raw
+}
+
 export function parseSettings(input: unknown): AppSettings {
-  const raw = migrateBuiltinLook(migrateLegacyCharacter(input))
+  const raw = migrateStreamSource(migrateBuiltinLook(migrateLegacyCharacter(input)))
   const result = settingsSchema.safeParse(raw)
   if (result.success) return result.data
   // セクション単位でフォールバック

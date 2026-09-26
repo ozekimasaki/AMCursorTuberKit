@@ -10,6 +10,8 @@ export interface YouTubeInnertubeOptions {
 
 interface TextLike {
   text?: string
+  /** 文字と絵文字の並び。youtubei.js の EmojiRun は text にカスタム絵文字の内部ID（UC…/…）を入れるため、runs から組み立てる */
+  runs?: { text?: string; emoji?: { shortcuts?: string[]; is_custom?: boolean } }[]
 }
 interface BadgeLike {
   icon_type?: string
@@ -33,8 +35,6 @@ export interface InnertubeChatItem {
   header_subtext?: TextLike
   header?: { author_name?: TextLike; author_badges?: BadgeLike[]; primary_text?: TextLike } | null
   author_external_channel_id?: string
-  timestamp?: number
-  timestamp_usec?: string
 }
 
 // youtubei.js の解析エラー（YouTube側の仕様変更の兆候）は種類ごとに1回だけ記録する
@@ -57,7 +57,6 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
   protected readonly stability = 'beta' as const
   private yt?: Innertube
   private chat?: YT.LiveChat
-  private connectedAt = 0
 
   constructor(
     private options: YouTubeInnertubeOptions,
@@ -80,9 +79,13 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
       if (!videoId) throw new Error('配信がまだ始まっていません。始まったら自動で接続します')
     }
     if (!videoId) throw new FatalStreamError('配信URL・動画ID・チャンネルURL（@ハンドル）を入力してください')
+    // 待っている間に切断されたら、ここで止める（以降の await の後も同じ）
+    if (this.stopped) return
 
     this.yt ??= await Innertube.create({ lang: 'ja', location: 'JP', retrieve_player: false })
+    if (this.stopped) return
     const info = await this.yt.getInfo(videoId)
+    if (this.stopped) return
     if (!info.livechat || info.livechat.is_replay) {
       if (target.channelPath) throw new Error('ライブチャットが見つかりません。配信が始まったら自動で接続します')
       throw new FatalStreamError('この動画にはライブチャットがありません（配信終了後の可能性）')
@@ -90,15 +93,17 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
 
     const chat = info.getLiveChat()
     this.chat = chat
-    this.connectedAt = Date.now()
+    // 接続前の過去ログは youtubei.js が 'start' にだけ渡すので、chat-update には新しいコメントだけが届く
     chat.on('chat-update', (action) => {
       if (this.chat !== chat || !action.is(YTNodes.AddChatItemAction)) return
-      const item = action.item as unknown as InnertubeChatItem
-      const postedAt = item.timestamp ?? Number(item.timestamp_usec ?? 0) / 1000
-      // 接続直後に届く過去ログは読まない
-      if (postedAt && postedAt < this.connectedAt - 5000) return
-      const ev = mapInnertubeChatItem(item)
-      if (ev) this.emit(ev)
+      // 例外を youtubei.js へ返すと、以降のコメントの取得が止まる
+      try {
+        // 解析できなかった項目は null になる（仕様変更の兆候。parser error として記録済み）
+        const ev = mapInnertubeChatItem(action.item as unknown as InnertubeChatItem | null)
+        if (ev) this.emit(ev)
+      } catch (err) {
+        this.log('warn', 'youtube chat item skipped', { error: String(err) })
+      }
     })
     chat.on('error', (err) => this.log('warn', 'youtube live chat error', { error: String(err) }))
 
@@ -123,6 +128,7 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
       chat.stop()
       throw err
     }
+    if (this.stopped) return
 
     // 受信開始後に止まった場合（配信終了・取得失敗の連続）は再接続する。配信が終わっていれば再接続時に判定される
     chat.on('end', () => {
@@ -140,8 +146,14 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
   }
 }
 
-export function mapInnertubeChatItem(item: InnertubeChatItem): StreamEvent | null {
-  if (!item.id) return null
+/** 文字と絵文字を並べた本文。カスタム絵文字は :face-blue-smiling: のようなショートカット名にする */
+function textOf(t?: TextLike): string {
+  if (!t?.runs) return t?.text ?? ''
+  return t.runs.map((r) => (r.emoji?.is_custom ? (r.emoji.shortcuts?.[0] ?? '') : (r.text ?? ''))).join('')
+}
+
+export function mapInnertubeChatItem(item: InnertubeChatItem | null | undefined): StreamEvent | null {
+  if (!item?.id) return null
   let kind: StreamEventKind
   let text: string
   let amount: StreamEvent['amount']
@@ -149,11 +161,11 @@ export function mapInnertubeChatItem(item: InnertubeChatItem): StreamEvent | nul
   switch (item.type) {
     case 'LiveChatTextMessage':
       kind = 'chat'
-      text = item.message?.text ?? ''
+      text = textOf(item.message)
       break
     case 'LiveChatPaidMessage':
       kind = 'superchat'
-      text = item.message?.text ?? ''
+      text = textOf(item.message)
       amount = item.purchase_amount ? parseYouTubeAmount(item.purchase_amount) : undefined
       break
     case 'LiveChatPaidSticker':
@@ -163,11 +175,15 @@ export function mapInnertubeChatItem(item: InnertubeChatItem): StreamEvent | nul
       break
     case 'LiveChatMembershipItem':
       kind = 'subscribe'
-      text = item.message?.text || item.header_primary_text?.text || item.header_subtext?.text || 'メンバーになりました'
+      text =
+        textOf(item.message) ||
+        textOf(item.header_primary_text) ||
+        textOf(item.header_subtext) ||
+        'メンバーになりました'
       break
     case 'LiveChatSponsorshipsGiftPurchaseAnnouncement':
       kind = 'gift'
-      text = item.header?.primary_text?.text || 'メンバーシップをギフトしました'
+      text = textOf(item.header?.primary_text) || 'メンバーシップをギフトしました'
       author = {
         id: item.author_external_channel_id,
         name: item.header?.author_name?.text,

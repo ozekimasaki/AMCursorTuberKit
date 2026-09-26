@@ -108,13 +108,13 @@ workers/stream-relay         Kick 公式 Webhook の中継（Kick を公式API�
 
 ## 配信コメントの取得
 
-- **取得方法の切り替え:** YouTube / Twitch / Kick は、設定 `stream.<platform>.source` で取得方法を選びます。`web` は APIキー不要の方法（既定）、`api` は公式APIです。公式APIの実装は、`web` が止まったときの代わりとして残してあります。自動では切り替えません。
+- **取得方法の切り替え:** YouTube / Twitch / Kick は、設定 `stream.<platform>.source` で取得方法を選びます。`web` は APIキー不要の方法（既定）、`api` は公式APIです。公式APIの実装は、`web` が止まったときの代わりとして残してあります。自動では切り替えません。`source` が無い旧版の設定は、公式APIで使っていたサービスだけ `api` として読み込みます（settings.ts の `migrateStreamSource`）。
 - **`web` が止まったときの確認先:** `web` は各サービスの Web 版が内部で使っている仕組みなので、予告なく止まることがあります。止まったら次を確認します。
   - YouTube: `youtubei.js` を更新する（packages/stream-youtube）。仕様変更の手がかりは、ログの `youtube parser error` です。
   - Kick: `packages/stream-kick/src/pusher.ts` の `PUSHER_URL`（接続キー）とイベント名を、kick.com の Web 版と照らし合わせる。
   - Twitch: 匿名 IRC（@twurple/chat）で受信しています。フォロー通知は取れません。
 - **Kick のチャンネル情報:** `kick.com/api/v2/channels/{slug}` は、Node の fetch だと Cloudflare に 403 で弾かれます。必ず `DesktopHost.browserFetch` を使ってください。
-- **視聴者ID:** 視聴者の記憶は `platform:platformUserId` で引きます。取得方法が違っても、同じ ID を入れてください（YouTube はチャンネルID「UC…」、Twitch と Kick は数値のユーザーID）。
+- **視聴者ID:** 視聴者の記憶は `platform:platformUserId` で引きます。取得方法が違っても、同じ ID を入れてください（YouTube はチャンネルID「UC…」、Twitch と Kick は数値のユーザーID）。Kick の web 経路では、サブスク・ギフト・ホストのイベントにユーザー名しか無いため、チャットで見た ID か `createKickUserIdResolver` で数値のIDに直します（チャットの `sender.id` とチャンネル情報の `user_id` は同じ値です）。
 
 ## 書き方の決まり
 
