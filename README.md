@@ -163,3 +163,9 @@ UI は shadcn/ui（Base UI）+ Tailwind CSS v4。色・角丸・動きのカー�
 - Cloudflare Agent Memory は private beta の HTTP API に合わせて実装しています。レスポンス形式が変わっても落ちないよう緩く解釈し、失敗時はローカル記憶を使います
 - Cursor SDK の `systemPrompt` はサーバー側で利用が制限されているため、キャラクター設定は毎ターンのメッセージに含めています
 - macOS / Linux 版はビルド設定のみで、動作は未検証です
+
+## ライセンス
+
+[MIT License](LICENSE)
+
+同梱していない外部の素材・ソフトウェア（Live2D Cubism Core、VOICEVOX の音声、各アバターモデルなど）は、それぞれの利用規約に従ってください。
