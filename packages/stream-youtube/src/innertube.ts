@@ -84,12 +84,17 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
 
     this.yt ??= await Innertube.create({ lang: 'ja', location: 'JP', retrieve_player: false })
     if (this.stopped) return
-    const info = await this.yt.getInfo(videoId)
-    if (this.stopped) return
-    if (!info.livechat || info.livechat.is_replay) {
-      if (target.channelPath) throw new Error('ライブチャットが見つかりません。配信が始まったら自動で接続します')
-      throw new FatalStreamError('この動画にはライブチャットがありません（配信終了後の可能性）')
+    // 削除済み・利用不可の動画では getInfo が通常の Error を投げる。ライブチャットが無いときと同じ扱いにする
+    let info
+    try {
+      info = await this.yt.getInfo(videoId)
+    } catch (err) {
+      if (this.stopped) return
+      if (!isPermanentVideoError(err)) throw err
+      throw noLiveChatError(Boolean(target.channelPath))
     }
+    if (this.stopped) return
+    if (!info.livechat || info.livechat.is_replay) throw noLiveChatError(Boolean(target.channelPath))
 
     const chat = info.getLiveChat()
     this.chat = chat
@@ -125,7 +130,7 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
       })
     } catch (err) {
       if (this.chat === chat) this.chat = undefined
-      chat.stop()
+      this.stopChat(chat)
       throw err
     }
     if (this.stopped) return
@@ -133,7 +138,9 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
     // 受信開始後に止まった場合（配信終了・取得失敗の連続）は再接続する。配信が終わっていれば再接続時に判定される
     chat.on('end', () => {
       if (this.chat !== chat) return
+      // 参照を外してから止める。stop しないとポーリングとリスナーが残り、close() から届かなくなる
       this.chat = undefined
+      this.stopChat(chat)
       this.scheduleReconnect('ライブチャットの取得が止まりました')
     })
     this.markHealthy('APIキー不要モードで受信中')
@@ -142,8 +149,28 @@ export class YouTubeInnertubeAdapter extends BaseStreamAdapter {
   protected async close() {
     const chat = this.chat
     this.chat = undefined
-    chat?.stop()
+    this.stopChat(chat)
   }
+
+  /** ポーリングを止め、アダプターを捕まえたリスナーも外す */
+  private stopChat(chat?: YT.LiveChat) {
+    chat?.stop()
+    chat?.removeAllListeners()
+  }
+}
+
+/** player の playability が ERROR のとき（削除済み・利用不可）。通信失敗とは分けて再接続しない */
+function isPermanentVideoError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  if (err.message === 'This video is unavailable') return true
+  const status = (err as { info?: { status?: unknown } }).info?.status
+  return status === 'ERROR'
+}
+
+/** チャンネルURLは配信開始まで待つ。動画IDは打ち間違いや終了後なので止め直す */
+function noLiveChatError(waitingForChannel: boolean): Error {
+  if (waitingForChannel) return new Error('ライブチャットが見つかりません。配信が始まったら自動で接続します')
+  return new FatalStreamError('この動画にはライブチャットがありません（配信終了後の可能性）')
 }
 
 /** 文字と絵文字を並べた本文。カスタム絵文字は :face-blue-smiling: のようなショートカット名にする */
