@@ -24,13 +24,29 @@ export type TwitchIrcNotice =
   | { type: 'raid'; viewers: number }
   | { type: 'announcement'; message: string }
 
+/** URL の最初の部分がチャンネル名ではないページ（ポップアウトのチャット・モデレーター画面・埋め込み・ダッシュボード） */
+const NON_CHANNEL_PREFIXES = new Set(['popout', 'moderator', 'embed', 'u'])
+
+/** チャンネル名・チャンネルURL（twitch.tv/popout/<名前>/chat などを含む）からログイン名を取り出す */
 export function normalizeTwitchLogin(input: string): string {
-  return input
+  const parts = input
     .trim()
-    .replace(/^https?:\/\/(?:www\.|m\.)?twitch\.tv\//i, '')
+    .replace(/^(?:https?:\/\/)?(?:[\w-]+\.)*twitch\.tv\//i, '')
     .replace(/^[#@]/, '')
-    .split(/[/?#]/)[0]
-    .toLowerCase()
+    .split(/[/?#]/)
+  const login = NON_CHANNEL_PREFIXES.has(parts[0].toLowerCase()) && parts[1] ? parts[1] : parts[0]
+  return login.toLowerCase()
+}
+
+/**
+ * twurple の参加失敗を、再試行するかどうかで分ける。
+ * 応答が無いだけ（twurple_timeout）は回線が遅いときにも起きるので再試行する。存在しないチャンネルもこの理由になる。
+ */
+export function twitchJoinError(login: string, reason: string): Error {
+  if (reason === 'twurple_timeout') {
+    return new Error(`#${login} に参加できませんでした（応答がありません）。チャンネル名が正しいか確認してください`)
+  }
+  return new FatalStreamError(`チャンネル「${login}」に参加できません（${reason}）`)
 }
 
 /**
@@ -67,6 +83,10 @@ export class TwitchIrcAdapter extends BaseStreamAdapter {
     client.onMessage((_channel, _user, text, msg) =>
       push(mapTwitchIrcMessage({ id: msg.id, text, bits: msg.bits, user: msg.userInfo })),
     )
+    // /me のメッセージは onMessage ではなく onAction に届く
+    client.onAction((_channel, _user, text, msg) =>
+      push(mapTwitchIrcMessage({ id: msg.id, text, bits: msg.bits, user: msg.userInfo })),
+    )
     client.onSub((_c, _u, info, msg) =>
       push(mapTwitchIrcNotice(msg.id, msg.userInfo, { type: 'sub', months: info.months, message: info.message })),
     )
@@ -100,8 +120,7 @@ export class TwitchIrcAdapter extends BaseStreamAdapter {
         const timer = setTimeout(() => finish(new Error('Twitch チャットへの接続がタイムアウトしました')), 15_000)
         const joined = client.onJoin((channel) => channel === login && finish())
         const failed = client.onJoinFailure(
-          (channel, reason) =>
-            channel === login && finish(new FatalStreamError(`チャンネル「${login}」に参加できません（${reason}）`)),
+          (channel, reason) => channel === login && finish(twitchJoinError(login, reason)),
         )
         client.connect()
       })
@@ -116,6 +135,15 @@ export class TwitchIrcAdapter extends BaseStreamAdapter {
     })
     client.onJoin((channel) => {
       if (alive() && channel === login) this.markHealthy(`#${login} のチャットを受信中`)
+    })
+    // twurple は再接続した後の参加に失敗しても再試行しないため、こちらでつなぎ直す
+    client.onJoinFailure((channel, reason) => {
+      if (!alive() || channel !== login) return
+      this.client = undefined
+      client.quit()
+      const err = twitchJoinError(login, reason)
+      if (err instanceof FatalStreamError) this.fail(err.message)
+      else this.scheduleReconnect(err.message)
     })
     this.markHealthy(`#${login} のチャットを受信中`)
   }

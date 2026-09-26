@@ -1,5 +1,6 @@
 import type { StreamEvent, StreamEventKind } from '@amctk/shared'
 import { BaseStreamAdapter, FatalStreamError, type StreamLogger } from '@amctk/stream-core'
+import { normalizeTwitchLogin } from './irc'
 
 export * from './irc'
 
@@ -104,6 +105,7 @@ export class TwitchStreamAdapter extends BaseStreamAdapter {
   private token = ''
   private userId = ''
   private broadcasterId = ''
+  private login = ''
 
   constructor(private options: TwitchOptions, log?: StreamLogger) {
     super(log)
@@ -111,9 +113,11 @@ export class TwitchStreamAdapter extends BaseStreamAdapter {
 
   protected async open() {
     if (!this.options.clientId) throw new FatalStreamError('Twitch Client ID が未設定です')
-    if (!this.options.channelLogin) throw new FatalStreamError('チャンネル名が未設定です')
+    // 入力欄は取得方法に関係なく URL や #名前 を受け付けるので、web 経路と同じ整形をする
+    this.login = normalizeTwitchLogin(this.options.channelLogin)
+    if (!this.login) throw new FatalStreamError('チャンネル名が未設定です')
     await this.authorize()
-    this.broadcasterId = await this.lookupUserId(this.options.channelLogin.trim().toLowerCase())
+    this.broadcasterId = await this.lookupUserId(this.login)
     this.connectWs(EVENTSUB_WS)
   }
 
@@ -185,7 +189,7 @@ export class TwitchStreamAdapter extends BaseStreamAdapter {
         this.keepaliveMs = (session.keepalive_timeout_seconds ?? 10) * 1000
         previous?.close()
         await this.subscribe(session.id)
-        this.markHealthy(`#${this.options.channelLogin} のチャットを受信中`)
+        this.markHealthy(`#${this.login} のチャットを受信中`)
         break
       }
       case 'session_reconnect': {

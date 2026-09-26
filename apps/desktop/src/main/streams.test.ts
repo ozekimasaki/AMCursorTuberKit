@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createKickChatroomResolver, mapKickPusherEvent, mapKickWebhook, normalizeKickSlug } from '@amctk/stream-kick'
+import { createKickChatroomResolver, createKickUserIdResolver, mapKickPusherEvent, mapKickWebhook, normalizeKickSlug } from '@amctk/stream-kick'
 import { FatalStreamError } from '@amctk/stream-core'
 import { normalizeTikTokBridgeMessage } from '@amctk/stream-tiktok'
-import { mapTwitchEvent, mapTwitchIrcMessage, mapTwitchIrcNotice, normalizeTwitchLogin } from '@amctk/stream-twitch'
+import { mapTwitchEvent, mapTwitchIrcMessage, mapTwitchIrcNotice, normalizeTwitchLogin, twitchJoinError } from '@amctk/stream-twitch'
 import { mapYouTubeItem, parseYouTubeTarget } from '@amctk/stream-youtube'
 import { JsonObjectStreamParser } from '@amctk/stream-core'
 
@@ -28,6 +28,14 @@ describe('YouTube', () => {
     expect(parseYouTubeTarget('https://www.youtube.com/@weathernews/live')).toEqual({ channelPath: '@weathernews' })
     expect(parseYouTubeTarget('https://www.youtube.com/channel/UCNsidkYpIAQ4QaufptQBPHQ')).toEqual({ channelPath: 'channel/UCNsidkYpIAQ4QaufptQBPHQ' })
     expect(parseYouTubeTarget('UCNsidkYpIAQ4QaufptQBPHQ')).toEqual({ channelPath: 'channel/UCNsidkYpIAQ4QaufptQBPHQ' })
+  })
+
+  it('日本語のハンドル、アドレス欄からコピーしたURL、Studio の配信画面のURLも判別する', () => {
+    expect(parseYouTubeTarget('@しぐれうい')).toMatchObject({ channelPath: '@しぐれうい' })
+    expect(parseYouTubeTarget('https://www.youtube.com/@%E3%81%97%E3%81%90%E3%82%8C/live')).toMatchObject({ channelPath: '@しぐれ' })
+    // ASCII で始まるハンドルが途中で切れて別のチャンネルにならない
+    expect(parseYouTubeTarget('https://www.youtube.com/@abc%E3%82%A6')).toMatchObject({ channelPath: '@abcウ' })
+    expect(parseYouTubeTarget('https://studio.youtube.com/video/abcdefghijk/livestreaming')).toMatchObject({ videoId: 'abcdefghijk' })
   })
 
   it('スーパーチャットを共通イベントへ正規化する', () => {
@@ -63,6 +71,18 @@ describe('Twitch（ログイン不要）', () => {
     expect(normalizeTwitchLogin(' #xqc ')).toBe('xqc')
   })
 
+  it('ポップアウトのチャットやモデレーター画面のURL、スキームの無いURLからもチャンネル名を取り出す', () => {
+    expect(normalizeTwitchLogin('https://www.twitch.tv/popout/xqc/chat?popout=')).toBe('xqc')
+    expect(normalizeTwitchLogin('https://www.twitch.tv/moderator/xqc')).toBe('xqc')
+    expect(normalizeTwitchLogin('https://dashboard.twitch.tv/u/xqc/stream-manager')).toBe('xqc')
+    expect(normalizeTwitchLogin('twitch.tv/xqc')).toBe('xqc')
+  })
+
+  it('参加の応答が無いだけなら再試行し、それ以外の参加失敗は再試行しない', () => {
+    expect(twitchJoinError('xqc', 'twurple_timeout')).not.toBeInstanceOf(FatalStreamError)
+    expect(twitchJoinError('xqc', 'msg_channel_suspended')).toBeInstanceOf(FatalStreamError)
+  })
+
   it('Cheer 付きのメッセージを cheer として扱う', () => {
     expect(mapTwitchIrcMessage({ id: 'a', text: 'Cheer100 がんば', bits: 100, user })).toMatchObject({
       id: 'tw:a',
@@ -95,6 +115,26 @@ describe('Kick', () => {
 describe('Kick（APIキー不要）', () => {
   it('チャンネル名はURLでも受け付ける', () => {
     expect(normalizeKickSlug('https://kick.com/XQC?tab=vods')).toBe('xqc')
+  })
+
+  it('ポップアウトのURL、スキームの無いURL、_ を含むユーザー名からも slug を取り出す', () => {
+    expect(normalizeKickSlug('https://kick.com/popout/xqc/chat')).toBe('xqc')
+    expect(normalizeKickSlug('kick.com/xqc')).toBe('xqc')
+    // slug では _ が - になる（kick.com/api/v2/channels/sir_fas は 404）
+    expect(normalizeKickSlug('@Sir_Fas')).toBe('sir-fas')
+  })
+
+  it('ユーザー名から数値のユーザーIDを調べ、調べられなければ undefined にする', async () => {
+    const urls: string[] = []
+    const resolve = createKickUserIdResolver(async (url) => {
+      urls.push(url)
+      return new Response(JSON.stringify({ id: 111419511, user_id: 112662668, slug: 'sir-fas' }), { status: 200 })
+    })
+    expect(await resolve('Sir_Fas')).toBe(112662668)
+    expect(await resolve('sir_fas')).toBe(112662668)
+    expect(urls).toEqual(['https://kick.com/api/v2/channels/sir-fas'])
+    const blocked = createKickUserIdResolver(async () => new Response('', { status: 403 }))
+    expect(await blocked('fan')).toBeUndefined()
   })
 
   it('Pusher の ChatMessageEvent を正規化し、エモート表記を読みやすくする', () => {

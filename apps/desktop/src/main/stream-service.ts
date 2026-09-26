@@ -36,6 +36,8 @@ function stabilityOf(platform: ExternalPlatform, s: StreamSettings): StreamSourc
 export interface StreamServiceDeps {
   /** Kick の slug → チャットルームID（Electron の通信処理で調べる） */
   resolveKickChatroomId(slug: string): Promise<number>
+  /** Kick のユーザー名 → 数値のユーザーID（調べられなければ undefined） */
+  resolveKickUserId(username: string): Promise<number | undefined>
 }
 
 /**
@@ -57,14 +59,17 @@ export class StreamSourceService {
 
   private create(platform: ExternalPlatform): BaseStreamAdapter {
     const s = this.getSettings().stream
+    const stream = () => this.getSettings().stream
     const log = (category: `stream.${ExternalPlatform}`) => (level: 'info' | 'warn' | 'error', m: string, d?: Record<string, unknown>) =>
       this.logger.log(level, category, m, d)
+    // web 経路は配信待ちや取得失敗で再試行を続けるため、入力欄の値は getter で渡し、再試行のたびに最新の設定を読ませる
+    // （例: エラーの案内どおりチャットルームIDを入れたら、次の再試行で使われる）
     switch (platform) {
       case 'youtube':
-        if (s.youtube.source === 'web') return new YouTubeInnertubeAdapter({ target: s.youtube.target }, log('stream.youtube'))
+        if (s.youtube.source === 'web') return new YouTubeInnertubeAdapter({ get target() { return stream().youtube.target } }, log('stream.youtube'))
         return new YouTubeStreamAdapter({ target: s.youtube.target, apiKey: this.secrets.get('youtubeApiKey') }, log('stream.youtube'))
       case 'twitch':
-        if (s.twitch.source === 'web') return new TwitchIrcAdapter({ channelLogin: s.twitch.channelLogin }, log('stream.twitch'))
+        if (s.twitch.source === 'web') return new TwitchIrcAdapter({ get channelLogin() { return stream().twitch.channelLogin } }, log('stream.twitch'))
         return new TwitchStreamAdapter(
           {
             clientId: s.twitch.clientId,
@@ -84,9 +89,14 @@ export class StreamSourceService {
         if (s.kick.source === 'web') {
           return new KickPusherAdapter(
             {
-              channelSlug: s.kick.channelSlug,
-              chatroomId: Number(s.kick.chatroomId.trim()) || undefined,
+              get channelSlug() {
+                return stream().kick.channelSlug
+              },
+              get chatroomId() {
+                return Number(stream().kick.chatroomId.trim()) || undefined
+              },
               resolveChatroomId: (slug) => this.deps.resolveKickChatroomId(slug),
+              resolveUserId: (username) => this.deps.resolveKickUserId(username),
             },
             log('stream.kick'),
           )

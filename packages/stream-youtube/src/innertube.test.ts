@@ -141,11 +141,53 @@ describe('YouTube（APIキー不要）', () => {
     expect(parseYouTubeAmount('???')).toMatchObject({ value: 0, currency: '', display: '???' })
   })
 
-  it('チャンネルの /live ページから配信中・配信予定の枠だけを取り出す', () => {
+  it('チャンネルの /live ページから配信中の枠だけを取り出し、配信予定の枠（待機所・フリーチャット）は使わない', () => {
     const canonical = '<link rel="canonical" href="https://www.youtube.com/watch?v=dbwfbPPeXFI">'
-    expect(extractLiveVideoId(`${canonical}{"isLiveNow":true}`)).toBe('dbwfbPPeXFI')
-    expect(extractLiveVideoId(`${canonical}{"isUpcoming":true}`)).toBe('dbwfbPPeXFI')
-    expect(extractLiveVideoId(`${canonical}{"isLiveNow":false}`)).toBeNull()
+    expect(
+      extractLiveVideoId(
+        `${canonical}"liveBroadcastDetails":{"isLiveNow":true,"startTimestamp":"2026-09-25T07:21:44-07:00"}`,
+      ),
+    ).toBe('dbwfbPPeXFI')
+    expect(
+      extractLiveVideoId(
+        `${canonical}"liveBroadcastDetails":{"isLiveNow":false,"startTimestamp":"2026-10-30T15:00:00+00:00"},"isUpcoming":true`,
+      ),
+    ).toBeNull()
+    // 関連動画など、表示中の動画以外の値は見ない
+    expect(extractLiveVideoId(`${canonical}{"isLiveNow":true}`)).toBeNull()
     expect(extractLiveVideoId('<link rel="canonical" href="https://www.youtube.com/@weathernews">')).toBeNull()
+  })
+
+  it('カスタム絵文字は内部IDではなくショートカット名にする', () => {
+    const e = mapInnertubeChatItem(
+      parse({
+        liveChatTextMessageRenderer: {
+          id: 't3',
+          timestampUsec: usec,
+          message: {
+            runs: [
+              { text: 'かわいい' },
+              {
+                emoji: {
+                  emojiId: 'UCkszU2WH9gy1mb0dV-11UJg/CIW60IPp_dYCFcuqTgodEu4IlQ',
+                  shortcuts: [':face-blue-smiling:'],
+                  searchTerms: ['face-blue-smiling'],
+                  image: { thumbnails: [] },
+                  isCustomEmoji: true,
+                },
+              },
+              { emoji: { emojiId: '😀', shortcuts: [':grinning_face:'], image: { thumbnails: [] } } },
+            ],
+          },
+          ...author('@fan', 'UC3'),
+          ...menu,
+        },
+      }),
+    )
+    expect(e).toMatchObject({ text: 'かわいい:face-blue-smiling:😀' })
+  })
+
+  it('解析できなかった項目（null）は無視する', () => {
+    expect(mapInnertubeChatItem(null)).toBeNull()
   })
 })

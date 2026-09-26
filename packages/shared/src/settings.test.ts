@@ -35,13 +35,29 @@ describe('settings', () => {
     expect(style.character.baseline.wrath).toBe(80)
   })
 
-  it('配信コメントの取得経路は既定でAPIキー不要（web）。保存済みの設定にも補われ、公式APIの選択は残す', () => {
+  it('配信コメントの取得経路は既定でAPIキー不要（web）。保存済みの選択はそのまま使う', () => {
     const s = defaultSettings().stream
     expect([s.youtube.source, s.twitch.source, s.kick.source]).toEqual(['web', 'web', 'web'])
     expect(s.kick.chatroomId).toBe('')
-    const saved = parseSettings({ stream: { youtube: { enabled: true, target: 'abcdefghijk' }, twitch: { source: 'api', clientId: 'cid' } } })
+    const saved = parseSettings({ stream: { youtube: { source: 'web', enabled: true, target: 'abcdefghijk' }, twitch: { source: 'api', clientId: 'cid' } } })
     expect(saved.stream.youtube).toMatchObject({ enabled: true, source: 'web', target: 'abcdefghijk' })
     expect(saved.stream.twitch).toMatchObject({ source: 'api', clientId: 'cid' })
+  })
+
+  it('取得経路が無い旧版の設定は、公式APIで使っていたサービスだけ api のままにする', () => {
+    const old = parseSettings({
+      stream: {
+        youtube: { enabled: true, target: 'Cg0KC2FiY2RlZmdoaWpr' },
+        twitch: { enabled: false, clientId: 'cid', channelLogin: 'kuma' },
+        kick: { enabled: false, relayUrl: '', channelSlug: '' },
+      },
+    })
+    expect(old.stream).toMatchObject({
+      youtube: { source: 'api', target: 'Cg0KC2FiY2RlZmdoaWpr' },
+      twitch: { source: 'api', clientId: 'cid' },
+      kick: { source: 'web' },
+    })
+    expect(parseSettings({ stream: { kick: { relayUrl: 'https://relay.example.workers.dev' } } }).stream.kick).toMatchObject({ source: 'api' })
   })
 
   it('組み込みアバターの既定はココア。旧版の既定色（strawberry）だけ移行し、選び直した色は残す', () => {

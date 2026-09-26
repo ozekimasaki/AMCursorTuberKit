@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { CopyIcon, ExternalLinkIcon, FlaskConicalIcon, LogInIcon, PlugIcon, UnplugIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { StreamPlatform, StreamSource, StreamSourceHealth, TwitchDeviceLogin } from '@amctk/shared'
+import { kickChannelApiUrl, normalizeKickSlug } from '@amctk/stream-kick/slug'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -92,9 +93,6 @@ function PlatformCard({
     </Card>
   )
 }
-
-/** チャンネルURLが貼られていても slug だけにする */
-const kickSlugOf = (input: string) => input.replace(/^https?:\/\/(?:www\.)?kick\.com\//i, '').split(/[/?#]/)[0]
 
 /** 取得経路の切り替え。web はAPIキー不要、api は公式API */
 function SourceToggle({
@@ -270,7 +268,17 @@ export function StreamsPage() {
         )}
         <Field>
           <FieldLabel htmlFor="kick-slug">チャンネル</FieldLabel>
-          <Input id="kick-slug" placeholder="your_channel" value={s.kick.channelSlug} onChange={(e) => update({ stream: { kick: { channelSlug: e.target.value.trim() } } })} />
+          <Input
+            id="kick-slug"
+            placeholder="your_channel"
+            value={s.kick.channelSlug}
+            onChange={(e) => {
+              const channelSlug = e.target.value.trim()
+              // チャットルームIDはチャンネルごとに違うので、別のチャンネルにしたら手動で入れたIDは消す
+              const changed = normalizeKickSlug(channelSlug) !== normalizeKickSlug(s.kick.channelSlug)
+              update({ stream: { kick: { channelSlug, ...(changed ? { chatroomId: '' } : {}) } } })
+            }}
+          />
           <FieldDescription>kick.com/ の後ろの部分です。チャンネルのURLをそのまま貼っても構いません</FieldDescription>
         </Field>
         {s.kick.source === 'api' && <SecretField secret="kickRelaySecret" description="Worker の RELAY_SECRET と同じ値を入れます。" />}
@@ -290,7 +298,7 @@ export function StreamsPage() {
                 <button
                   type="button"
                   className="font-bold text-primary hover:underline"
-                  onClick={() => void api.app.openExternal(`https://kick.com/api/v2/channels/${encodeURIComponent(kickSlugOf(s.kick.channelSlug))}`)}
+                  onClick={() => void api.app.openExternal(kickChannelApiUrl(normalizeKickSlug(s.kick.channelSlug)))}
                 >
                   開く <ExternalLinkIcon className="inline size-3" />
                 </button>
