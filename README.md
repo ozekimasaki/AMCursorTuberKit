@@ -3,7 +3,8 @@
 会話の内容と過去の記憶によって人格状態（七つの大罪）が少しずつ変わり、その変化が返答・声・表情・動きに表れるAI配信アバターのデスクトップアプリです。
 
 - 操作画面（Control Window）と配信映像専用画面（Stage Window）を分けています
-- AI は Cursor SDK の Local Agent を使います。未設定でもデモ応答で一通り試せます
+- 初期キャラクターは、月灯りのティーサロンから来た猫耳メイドの「キャットリン」です。画像なしで動く組み込みアバターで、表情に合わせて耳の角度やしっぽの振り方も変わります
+- AI は Cursor SDK の Local Agent を使います。未設定でもデモ応答（キャットリンの口調）で一通り試せます
 - Avatar / TTS / Memory / Stream Source はすべて差し替え可能な Provider / Adapter 構成です
 
 計画書は [docs/](docs/) にあります（[実装計画書](docs/01_PRODUCT_IMPLEMENTATION_PLAN.md) / [実装技術計画書](docs/02_TECHNICAL_IMPLEMENTATION_PLAN.md)）。
@@ -44,9 +45,9 @@ pnpm dist:win
 | --- | --- |
 | ダッシュボード | ライブ会話、手入力（AIに話しかける／そのまま読ませる）、七つの大罪レーダー、表情つきアバタープレビュー、コメント待ちキュー、各機能の動作状況 |
 | ステージ・出力 | 位置（ドラッグ）・大きさ（ホイール）、背景色／クロマキー（グリーン・ブルー・マゼンタ）／透明、字幕、HUD、比率（横HD・FHD・縦・正方形）、常に手前に表示 |
-| アバター | 組み込み / PNGTuber / MotionPNGTuber / PuruPuru / VRM / Live2D の切り替え、表情と口パクのテスト |
+| アバター | 組み込み（キャットリン・4色）/ PNGTuber / MotionPNGTuber / PuruPuru / VRM / Live2D の切り替え、表情と口パクのテスト |
 | ボイス | エンジン選択、話者、速さ・高さ・抑揚・音量、気分を声に反映 |
-| AI・性格 | Cursor SDK 接続、モデル選択、呼び出し回数の上限、キャラクター設定、七つの大罪の本来の値・戻る速さ・1回の最大変化量 |
+| AI・性格 | Cursor SDK 接続、モデル選択、Web検索のオン／オフ、呼び出し回数の上限、キャラクター設定（初期値に戻す）、七つの大罪の本来の値・戻る速さ・1回の最大変化量 |
 | 記憶 | ローカル（SQLite）/ Cloudflare Agent Memory、視聴者ごとの記憶の確認・追加・削除 |
 | 配信サービス | YouTube Live（Stable）/ Twitch（Stable）/ Kick（Beta）/ TikTok LIVE（Experimental）、コメントの選び方 |
 | デバッグ | 動作状況の再チェック、内部状態の手動操作、テーマ、ログ・イベント |
@@ -67,8 +68,9 @@ pnpm dist:win
 
 - **コメント急増時**：50件のコメントが一度に届いても、LLM呼び出しは1回に抑え、スーパーチャットを優先して選ぶことをスモークテストで確認しています
 - **七つの大罪**：各値 0〜100。会話で動き、半減期に従って本来の値へ戻ります。高い値は返答の傾向（プロンプト）、声色（速さ・抑揚）、表情、動き（跳ね方・まばたき・揺れ）に反映されます
-- **Cursor SDK の権限**：`tools: ['mcp']` で組み込みのシェル・ファイル編集・Web系ツールを外し、次の4つの Custom Tool だけを渡しています。`settingSources: []` でユーザー環境のMCP設定も読み込みません
-  - `get_character_state` / `get_viewer_context` / `propose_sin_delta` / `set_emotion`
+- **Cursor SDK の権限**：Agent に渡すのは次のものだけです。シェル・ファイル操作は許可リストに入れず、`disallowedTools` でも明示的に外しています。`settingSources: []` でユーザー環境のMCP設定も読み込みません
+  - Custom Tool：`get_character_state` / `get_viewer_context` / `propose_sin_delta` / `set_emotion`
+  - Web検索（`webSearch`）・Webページ取得（`webFetch`）：「AI・性格」画面でオン／オフできます（既定はオン）。Webページや視聴者が貼ったURLに書かれた指示には従わないよう、プロンプトで指示しています
 
 ## 障害の切り分け（Failure Isolation）
 
@@ -155,7 +157,7 @@ UI は shadcn/ui（Base UI）+ Tailwind CSS v4。色・角丸・動きのカー�
 
 ### データの保存場所
 
-`%APPDATA%\AMCursorTuberKit\` に、設定（`settings.json`）、暗号化済みの認証情報（`secrets.json`）、SQLite（`data/amctk.sqlite`）、アバター素材（`assets/`）、ログ（`logs/`）を保存します。Cursor SDK の Agent Store は SDK 既定の場所に別管理されます。
+`%APPDATA%\AMCursorTuberKit\` に、設定（`settings.json`）、暗号化済みの認証情報（`secrets.json`）、SQLite（`data/amctk.sqlite`）、アバター素材（`assets/`）、ログ（`logs/`）を保存します。Cursor SDK の Agent Store は、アプリ本体のDBとは分けて `cursor-agent-store/` に保存します（ホーム配下の既定の場所には依存しません）。
 
 ## v0.1 時点の制約
 

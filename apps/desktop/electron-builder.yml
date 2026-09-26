@@ -9,8 +9,8 @@ files:
   - out/**
   - package.json
   - build/icon.png
-  # main は CommonJS なので SDK の ESM / bundled ビルドと型・ソースマップは不要
-  - "!node_modules/@cursor/sdk/dist/esm/**"
+  # main は SDK を import() で ESM として読み込むので、CJS / bundled ビルドと型・ソースマップは不要
+  - "!node_modules/@cursor/sdk/dist/cjs/**"
   - "!node_modules/@cursor/sdk/dist/bundled/**"
   - "!**/*.map"
   - "!**/*.d.ts"
@@ -26,7 +26,8 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: build/icon.png
+  # 256/128/64/48/32/16px を含む ICO（build/icon.png から生成）
+  icon: build/icon.ico
   artifactName: ${productName}-${version}-Setup.${ext}
 nsis:
   oneClick: false

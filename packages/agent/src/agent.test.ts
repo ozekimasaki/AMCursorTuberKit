@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { StreamingMetaParser } from '@amctk/core'
 import { createSins } from '@amctk/shared'
+import { DENIED_BUILTIN_TOOLS, allowedBuiltinTools } from './cursor-agent'
 import { DemoCharacterAgent } from './demo-agent'
 import { createCharacterTools } from './tools'
 
@@ -30,6 +31,18 @@ describe('custom tools', () => {
   })
 })
 
+describe('built-in tools', () => {
+  it('Web系ツールは設定で切り替え、シェル・ファイル操作は常に許可しない', () => {
+    expect(allowedBuiltinTools({ web: true })).toEqual(['mcp', 'webSearch', 'webFetch'])
+    expect(allowedBuiltinTools({ web: false })).toEqual(['mcp'])
+    for (const web of [true, false]) {
+      const allowed = allowedBuiltinTools({ web })
+      for (const denied of DENIED_BUILTIN_TOOLS) expect(allowed).not.toContain(denied)
+    }
+    expect(DENIED_BUILTIN_TOOLS).toEqual(expect.arrayContaining(['shell', 'edit', 'delete']))
+  })
+})
+
 describe('DemoCharacterAgent', () => {
   it('メタ情報付きで返事をストリーミングする', async () => {
     const agent = new DemoCharacterAgent()
@@ -48,7 +61,7 @@ describe('DemoCharacterAgent', () => {
         },
         memory: null,
         sins: createSins(50),
-        characterName: 'ぷるる',
+        characterName: 'キャットリン',
         firstPerson: 'わたし',
       },
     })

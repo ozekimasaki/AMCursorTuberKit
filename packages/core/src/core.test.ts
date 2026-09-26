@@ -60,7 +60,7 @@ describe('SevenSinsEngine', () => {
 })
 
 describe('InteractionSelector', () => {
-  const opts = { bufferMs: 1000, minScore: 5, ignorePrefixes: ['!'], blockedWords: ['NG'], maxQueue: 20, characterName: 'ぷるる' }
+  const opts = { bufferMs: 1000, minScore: 5, ignorePrefixes: ['!'], blockedWords: ['NG'], maxQueue: 20, characterName: 'キャットリン' }
 
   it('重複・コマンド・NGワードを除外する', () => {
     const c = clock()
@@ -95,7 +95,7 @@ describe('InteractionSelector', () => {
 
   it('キャラ名入りのコメントはスコアが上がる', () => {
     const s = new InteractionSelector(opts)
-    const a = s.score(event({ id: 'p', text: 'ぷるるちゃん元気？' }, 0))
+    const a = s.score(event({ id: 'p', text: 'キャットリンさん元気？' }, 0))
     const b = s.score(event({ id: 'q', text: '元気？' }, 0))
     expect(a).toBeGreaterThan(b)
   })

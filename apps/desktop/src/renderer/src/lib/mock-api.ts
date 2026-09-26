@@ -28,9 +28,9 @@ export function createMockApi(): AmctkApi {
   const sins = { ...createSins(50), pride: 58, gluttony: 66, sloth: 38 }
   const conversation: ConversationEntry[] = [
     { id: 'c1', role: 'viewer', text: 'こんばんは！初見です', viewerName: 'もちこ', platform: 'youtube', at: Date.now() - 60000 },
-    { id: 'c2', role: 'character', text: 'もちこさん、いらっしゃい！来てくれてうれしいよ。', at: Date.now() - 55000, emotion: 'happy', sinDelta: { lust: 2, sloth: -3 } },
-    { id: 'c3', role: 'viewer', text: 'プリン好き？', viewerName: 'Kuma_77', platform: 'twitch', at: Date.now() - 30000 },
-    { id: 'c4', role: 'character', text: 'その話はずるい！おなかすいてきちゃった。', at: Date.now() - 25000, emotion: 'happy', sinDelta: { gluttony: 7 } },
+    { id: 'c2', role: 'character', text: 'もちこさん、ようこそ月灯りのティーサロンへ。ゆっくりしていってくださいね。', at: Date.now() - 55000, emotion: 'happy', sinDelta: { lust: 2, sloth: -3 } },
+    { id: 'c3', role: 'viewer', text: '紅茶は好き？', viewerName: 'Kuma_77', platform: 'twitch', at: Date.now() - 30000 },
+    { id: 'c4', role: 'character', text: 'いい香りのお話ですね。わたしのおすすめは、はちみつ入りのミルクティーかしら。', at: Date.now() - 25000, emotion: 'happy', sinDelta: { gluttony: 7 } },
   ]
   const snapshot = (): RuntimeSnapshot => ({
     sins: { current: { ...sins }, baseline: settings.character.baseline, updatedAt: Date.now() },
@@ -66,7 +66,7 @@ export function createMockApi(): AmctkApi {
     emit({ type: 'AGENT_STATUS', payload: { phase: 'thinking', provider: 'demo', turns: 3, callsLastMinute: 1 } })
     const out: ConversationEntry = { id: uid('out_'), role: 'character', text: '', at: Date.now(), streaming: true }
     emit({ type: 'CONVERSATION_APPENDED', payload: { ...out } })
-    const answer = `${name}さん、ありがとう！ブラウザプレビューなので、これはお試しの返事だよ。`
+    const answer = `${name}さん、ありがとうございます。これはブラウザプレビュー用のお試しの返事ですよ。`
     emit({ type: 'EMOTION_CHANGED', payload: { emotion: 'happy', intensity: 0.8 } })
     emit({ type: 'TTS_STARTED', payload: { id: out.id, text: answer, emotion: 'happy' } })
     for (const ch of answer) {
@@ -150,7 +150,7 @@ export function createMockApi(): AmctkApi {
     memory: {
       health: async () => ({ ok: true, provider: 'local' }),
       list: async () => [
-        { id: 'm1', viewerKey: 'youtube:mochiko', viewerName: 'もちこ', kind: 'preference', content: 'プリンが好き', createdAt: Date.now() - 86400000 },
+        { id: 'm1', viewerKey: 'youtube:mochiko', viewerName: 'もちこ', kind: 'preference', content: 'ミルクティーが好き', createdAt: Date.now() - 86400000 },
         { id: 'm2', viewerKey: 'youtube:mochiko', viewerName: 'もちこ', kind: 'fact', content: '猫を2匹飼っている', createdAt: Date.now() - 3600000 },
       ],
       viewers: async () => [

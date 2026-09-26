@@ -63,6 +63,7 @@ export class Orchestrator {
   private lastSpokeAt = Date.now()
   private sessionId = uid('session_')
   private readonly workspaceDir: string
+  private readonly agentStoreDir: string
 
   constructor(
     private bus: EventBus,
@@ -76,7 +77,9 @@ export class Orchestrator {
   ) {
     const s = getSettings()
     this.workspaceDir = join(userData, 'agent-workspace')
+    this.agentStoreDir = join(userData, 'cursor-agent-store')
     mkdirSync(this.workspaceDir, { recursive: true })
+    mkdirSync(this.agentStoreDir, { recursive: true })
     this.sins = new SevenSinsEngine(
       { baseline: s.character.baseline, halfLifeSec: s.character.decayHalfLifeSec, maxDeltaPerTurn: s.character.maxDeltaPerTurn },
       storage.loadSins() ?? undefined,
@@ -270,14 +273,16 @@ export class Orchestrator {
     const provider = this.providerId(s)
     if (provider === 'demo') return this.demo
     const apiKey = this.secrets.get('cursorApiKey')
-    const key = `${s.agent.modelId}|${apiKey.slice(-6)}|${s.agent.rotateAfterTurns}`
+    const key = `${s.agent.modelId}|${apiKey.slice(-6)}|${s.agent.rotateAfterTurns}|${s.agent.webTools}`
     if (!this.agent || this.agentKey !== key) {
       void this.agent?.dispose()
       this.agent = new CursorCharacterAgent({
         apiKey,
         modelId: s.agent.modelId,
         workspaceDir: this.workspaceDir,
+        storeDir: this.agentStoreDir,
         rotateAfterTurns: s.agent.rotateAfterTurns,
+        webTools: s.agent.webTools,
         bridge: this.bridge,
         log: (level, message, data) => this.log[level](message, data),
       })
@@ -299,7 +304,9 @@ export class Orchestrator {
       apiKey: this.secrets.get('cursorApiKey'),
       modelId: s.agent.modelId,
       workspaceDir: this.workspaceDir,
+      storeDir: this.agentStoreDir,
       rotateAfterTurns: 1,
+      webTools: false,
       bridge: this.bridge,
     })
     const h = await agent.health()
@@ -313,7 +320,9 @@ export class Orchestrator {
       apiKey: this.secrets.get('cursorApiKey'),
       modelId: '',
       workspaceDir: this.workspaceDir,
+      storeDir: this.agentStoreDir,
       rotateAfterTurns: 1,
+      webTools: false,
       bridge: this.bridge,
     })
     try {
@@ -392,6 +401,7 @@ export class Orchestrator {
       recent,
       maxDelta: s.character.maxDeltaPerTurn,
       toolsAvailable: true,
+      webTools: this.providerId(s) === 'cursor' && s.agent.webTools,
     })
     const entry: ConversationEntry = {
       id: uid('out_'),

@@ -1,8 +1,19 @@
 import { useState } from 'react'
-import { ExternalLinkIcon, PlugZapIcon, RefreshCwIcon, ShieldCheckIcon } from 'lucide-react'
+import { ExternalLinkIcon, PlugZapIcon, RefreshCwIcon, RotateCcwIcon, ShieldCheckIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { SIN_KEYS, SIN_META, type ModelOption } from '@amctk/shared'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from '@/components/ui/field'
@@ -110,15 +121,25 @@ function ConnectionCard() {
               </div>
               <FieldDescription>応答が速く安価なモデルほど配信向きです</FieldDescription>
             </Field>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldLabel htmlFor="web-tools">Web検索を使う</FieldLabel>
+                <FieldDescription>
+                  最近の話題や分からないことを、Web検索・Webページの取得で調べてから答えます。調べる分だけ返事は遅くなります
+                </FieldDescription>
+              </FieldContent>
+              <Switch id="web-tools" checked={a.webTools} onCheckedChange={(v) => update({ agent: { webTools: v } })} />
+            </Field>
             <Button variant="secondary" className="self-start" onClick={() => void test()} disabled={!hasKey || testing}>
               {testing ? <Spinner data-icon="inline-start" /> : <PlugZapIcon data-icon="inline-start" />}
               接続テスト
             </Button>
             <Alert className="border-candy-grape/30 bg-candy-grape-soft">
               <ShieldCheckIcon />
-              <AlertTitle>Agentに渡す権限は最小限です</AlertTitle>
+              <AlertTitle>シェル・ファイル操作は使わせません</AlertTitle>
               <AlertDescription>
-                シェル・ファイル編集・Web検索は使わせず、キャラクター状態の取得と感情・状態変化の「提案」だけを許可しています。状態の変化はアプリ側で範囲を検証してから反映します。
+                Agentが使えるのは、キャラクター状態の取得、感情と状態変化の「提案」{a.webTools ? '、Web検索・Webページの取得' : ''}だけです。状態の変化はアプリ側で範囲を検証してから反映します。
+                {a.webTools && ' Webページや視聴者が貼ったURLに書かれた指示には従わないよう指示しています。'}
               </AlertDescription>
             </Alert>
           </FieldGroup>
@@ -156,6 +177,35 @@ function ConnectionCard() {
   )
 }
 
+function ResetCharacterButton() {
+  const [open, setOpen] = useState(false)
+  const reset = async () => {
+    await api.settings.reset('character')
+    setOpen(false)
+    toast.success('キャラクター設定を初期値（キャットリン）に戻しました')
+  }
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>
+        <RotateCcwIcon data-icon="inline-start" />
+        初期値に戻す
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>キャラクター設定を初期値に戻しますか？</AlertDialogTitle>
+          <AlertDialogDescription>
+            名前・人物像・話し方・七つの大罪の本来の値が、初期キャラクター「キャットリン」の内容に置き換わります。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>やめる</AlertDialogCancel>
+          <AlertDialogAction onClick={() => void reset()}>戻す</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 function CharacterCard() {
   const [settings, update] = useSettings()
   if (!settings) return null
@@ -165,6 +215,9 @@ function CharacterCard() {
       <CardHeader>
         <CardTitle>キャラクター</CardTitle>
         <CardDescription>性格の土台です。ここに書いた内容をもとに返事をします</CardDescription>
+        <CardAction>
+          <ResetCharacterButton />
+        </CardAction>
       </CardHeader>
       <CardContent>
         <FieldGroup>
@@ -180,11 +233,11 @@ function CharacterCard() {
           </div>
           <Field>
             <FieldLabel htmlFor="c-persona">人物像</FieldLabel>
-            <Textarea id="c-persona" rows={4} value={c.persona} onChange={(e) => update({ character: { persona: e.target.value } })} />
+            <Textarea id="c-persona" rows={6} value={c.persona} onChange={(e) => update({ character: { persona: e.target.value } })} />
           </Field>
           <Field>
             <FieldLabel htmlFor="c-style">話し方</FieldLabel>
-            <Textarea id="c-style" rows={2} value={c.speakingStyle} onChange={(e) => update({ character: { speakingStyle: e.target.value } })} />
+            <Textarea id="c-style" rows={7} value={c.speakingStyle} onChange={(e) => update({ character: { speakingStyle: e.target.value } })} />
           </Field>
           <Field>
             <FieldLabel htmlFor="c-ng">触れない話題</FieldLabel>

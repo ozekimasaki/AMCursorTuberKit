@@ -8,61 +8,71 @@ interface Rule {
   replies: string[]
 }
 
+/**
+ * 初期キャラクター「キャットリン」の口調で書いた定型文。
+ * ですます調でやわらかく、口癖（ふふ／あら／そうね…など）は1回の返答に1つまで。
+ */
 const RULES: Rule[] = [
   {
     test: /(こんにち|こんばん|おはよ|はじめまして|初見|hello|hi\b)/i,
     emotion: 'happy',
     delta: { sloth: -3, lust: 2 },
-    replies: ['{name}さん、いらっしゃい！来てくれてうれしいよ。', '{name}さん、やっほー！今日もゆっくりしていってね。'],
+    replies: [
+      '{name}さん、ようこそ月灯りのティーサロンへ。ちょうど紅茶が入ったところです。ゆっくりしていってくださいね。',
+      'あら、{name}さん。今夜も来てくださったのね。どうぞ、いちばん眺めのいい席へ。',
+    ],
   },
   {
     test: /(かわいい|可愛い|すごい|天才|えらい|上手)/,
     emotion: 'smug',
     delta: { pride: 6, lust: 2 },
-    replies: ['えへへ、でしょー？もっと褒めてくれてもいいんだよ。', 'ふふん、{first}の実力、わかってきたみたいだね！'],
+    replies: ['ふふ、ありがとう。そう言われると、しっぽまで揺れてしまいますね。', 'お上手ですね。今日はいつもより少しだけ、胸を張ってしまいそう。'],
   },
   {
-    test: /(プリン|ごはん|ご飯|食べ|おなか|お腹|ラーメン|ケーキ|お菓子)/,
+    test: /(プリン|ごはん|ご飯|食べ|おなか|お腹|ラーメン|ケーキ|お菓子|紅茶|お茶|スコーン|クッキー)/,
     emotion: 'happy',
     delta: { gluttony: 7, sloth: -2 },
-    replies: ['その話はずるい！おなかすいてきちゃった。', '食べ物の話なら任せて。{first}、プリンなら三個はいけるよ！'],
+    replies: [
+      'いい香りのお話ですね。わたしのおすすめは、はちみつ入りのミルクティーかしら。',
+      '甘いもののお話は大歓迎よ。ね、いっしょに見ましょうか、今夜のお茶菓子。',
+    ],
   },
   {
     test: /(ねむ|眠|おやすみ|疲れ|つかれ)/,
     emotion: 'sleepy',
     delta: { sloth: 7 },
-    replies: ['わかる……{first}もちょっと眠くなってきたかも。', 'ふわぁ……あっ、あくびがうつっちゃった。'],
+    replies: ['夜も更けてきましたね。温かいカモミールティーでも、いかがかしら。', 'わたしも少しだけ、まぶたが重くなってきたみたい。……ふぁ、失礼しました。'],
   },
   {
     test: /(ばか|バカ|うざ|へた|下手|ポンコツ)/i,
     emotion: 'angry',
     delta: { wrath: 7, pride: -3 },
-    replies: ['むっ、いまのは聞き捨てならないよ！', 'ぷんすか！{first}だってがんばってるんだからね。'],
+    replies: ['あら、ちょっといじわるな言い方ね。お茶菓子を一枚、減らしてしまおうかしら。', 'むっ。……でも、そういう正直なところは嫌いじゃないですよ。'],
   },
   {
     test: /(他の配信|推し|浮気|あの子)/,
     emotion: 'sad',
     delta: { envy: 7 },
-    replies: ['えっ、他の子の話……？ちょっとだけやきもち焼いちゃうな。', 'むむ、{first}のことも忘れないでよね？'],
+    replies: ['他の子のお話ですか？ 少しだけ、妬けてしまいますね。', 'わたしのことも、ちゃんと見ていてくださいね。約束ですよ？'],
   },
   {
     test: /(好き|すき|大好き|愛して)/,
     emotion: 'shy',
     delta: { lust: 6, pride: 2 },
-    replies: ['えっ、急にそんなこと言われたら照れちゃうよ。', 'ありがと……{first}も{name}さんのこと、けっこう好きだよ。'],
+    replies: ['まあ、急にそんなことを言われたら、耳まで熱くなってしまいます。', 'うふ、ちょっとだけ内緒。わたしも{name}さんのこと、けっこう好きですよ。'],
   },
   {
     test: /[?？]$/,
     emotion: 'neutral',
     delta: { sloth: -1 },
-    replies: ['うーん、いい質問だね。{first}はね、たぶんそうだと思うよ。', 'それ気になるよね！ちょっと考えさせて……うん、きっと大丈夫！'],
+    replies: ['そうね、……わたしはきっとそうだと思います。{name}さんはどう思うかしら？', 'いい質問ですね。答えを探しに、少しだけ寄り道してみましょうか。'],
   },
 ]
 
 const FALLBACK: string[] = [
-  'なるほどね！{name}さん、コメントありがとう。',
-  'うんうん、それ面白いね。もっと聞かせて！',
-  'へえー、そうなんだ。{first}、ちょっと感心しちゃった。',
+  'コメントありがとう、{name}さん。その話、もう少し聞かせてくださいな。',
+  'あら、面白いですね。わたし、そういうお話がとても好きなんです。',
+  'なるほど、観察しがいがありますね。続きを聞かせてくれるかしら？',
 ]
 
 /**
@@ -84,7 +94,7 @@ export class DemoCharacterAgent implements CharacterAgent {
   async run(_prompt: string, handlers: AgentRunHandlers): Promise<AgentRunResult> {
     const started = Date.now()
     const ctx = handlers.context
-    const text = ctx ? this.compose(ctx) : '<meta>{"emotion":"neutral"}</meta>\nこんにちは！'
+    const text = ctx ? this.compose(ctx) : '<meta>{"emotion":"neutral"}</meta>\nようこそ、月灯りのティーサロンへ。'
     await sleep(350, handlers.signal)
     for (const chunk of chunked(text, 3)) {
       handlers.onText(chunk)
@@ -95,7 +105,7 @@ export class DemoCharacterAgent implements CharacterAgent {
 
   private compose(ctx: TurnContext): string {
     const p = ctx.interaction.primary
-    const name = p.viewer.displayName || 'みんな'
+    const name = p.viewer.displayName || 'みなさん'
     let emotion: AvatarEmotion = 'neutral'
     let delta: SinDelta = {}
     let body: string
@@ -103,15 +113,15 @@ export class DemoCharacterAgent implements CharacterAgent {
     if (p.kind === 'superchat' || p.kind === 'cheer' || p.kind === 'gift') {
       emotion = 'happy'
       delta = { greed: 6, pride: 3 }
-      body = `わあっ、{name}さん、${p.amount?.display ?? '応援'}ありがとう！すっごくうれしい！`
+      body = `まあ、{name}さん、${p.amount?.display ?? '応援'}をありがとうございます。今夜は特別なお菓子を用意しておきますね。`
     } else if (p.kind === 'subscribe') {
       emotion = 'happy'
       delta = { greed: 4, lust: 3 }
-      body = '{name}さん、メンバーになってくれてありがとう！これからよろしくね。'
+      body = '{name}さん、メンバーになってくださってありがとう。これからも、いっしょにお茶を楽しみましょうね。'
     } else if (p.kind === 'raid') {
       emotion = 'surprised'
       delta = { pride: 4, sloth: -4 }
-      body = 'わっ、レイドだ！みんないらっしゃい、ゆっくりしていってね！'
+      body = 'あら、たくさんのお客さまがいらっしゃいましたね。ようこそ、月灯りのティーサロンへ。'
     } else {
       const rule = RULES.find((r) => r.test.test(p.text.trim()))
       if (rule) {
@@ -124,9 +134,9 @@ export class DemoCharacterAgent implements CharacterAgent {
     }
 
     const memory = ctx.memory?.items.find((m) => m.kind === 'preference' || m.kind === 'fact')
-    if (memory && this.counter % 2 === 0) body += ` そういえば、${memory.content.replace(/。$/, '')}って覚えてるよ。`
-    if (ctx.sins.sloth > 72) body = body.replace(/！/g, '。') + ' ……ふわぁ。'
-    if (ctx.sins.wrath > 72) body += ' ……べつに怒ってないけどね！'
+    if (memory && this.counter % 2 === 0) body += ` 「${memory.content.replace(/。$/, '')}」というお話、ちゃんと覚えていますよ。`
+    if (ctx.sins.sloth > 72 && !body.includes('ふぁ')) body = body.replace(/！/g, '。') + ' ……ふぁ、失礼しました。'
+    if (ctx.sins.wrath > 72) body += ' ……べつに、怒ってはいませんよ？'
 
     const statement = !/[?？]\s*$/.test(p.text.trim())
     const remember = statement && /(好き|すき|嫌い|きらい|趣味|住んで|誕生日)/.test(p.text) ? `${name}さんは「${p.text.slice(0, 60)}」と言っていた` : ''

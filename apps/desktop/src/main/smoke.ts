@@ -36,7 +36,7 @@ export async function runSmoke(dir: string, deps: { windows: WindowManager; orch
     note('dashboard captured')
     deps.openStage()
     await wait(3500)
-    deps.orchestrator.submitManual('こんばんは！プリン好き？', 'スモークテスト')
+    deps.orchestrator.submitManual('こんばんは！紅茶は好き？', 'スモークテスト')
     note('manual input submitted')
     await wait(2500)
     await capture(deps.windows.stage, join(dir, '02-stage-speaking.png'))

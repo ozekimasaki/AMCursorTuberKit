@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { SettingSlider } from '../components/bits'
 
 const KINDS: { id: AvatarKind; name: string; desc: string; emoji: string }[] = [
-  { id: 'builtin', name: '組み込み', desc: '画像なしですぐ使える', emoji: '🍮' },
+  { id: 'builtin', name: '組み込み', desc: '猫耳メイド・画像不要', emoji: '🐱' },
   { id: 'png', name: 'PNGTuber', desc: '口閉じ/口開けの画像', emoji: '🖼️' },
   { id: 'motion-png', name: 'MotionPNG', desc: 'ループ動画＋口トラック', emoji: '🎞️' },
   { id: 'purupuru', name: 'PuruPuru', desc: '髪揺れ・表情PNG', emoji: '🍡' },
@@ -29,10 +29,10 @@ const KINDS: { id: AvatarKind; name: string; desc: string; emoji: string }[] = [
 ]
 
 const PALETTES = [
-  { id: 'strawberry', name: 'いちご', color: '#ff94b8' },
-  { id: 'mint', name: 'ミント', color: '#86e3c1' },
-  { id: 'lemon', name: 'レモン', color: '#ffd95c' },
-  { id: 'grape', name: 'ぶどう', color: '#bda4ff' },
+  { id: 'strawberry', name: 'いちご', color: '#f5a3bf' },
+  { id: 'mint', name: 'ミント', color: '#92d8bf' },
+  { id: 'lemon', name: 'レモン', color: '#f6cf6a' },
+  { id: 'grape', name: 'ぶどう', color: '#c2aef6' },
 ] as const
 
 const PNG_SLOTS = [
@@ -403,7 +403,7 @@ export function AvatarPage() {
           {a.kind === 'builtin' && (
             <FieldGroup>
               <Field>
-                <FieldLabel>カラー</FieldLabel>
+                <FieldLabel>髪とリボンの色</FieldLabel>
                 <ToggleGroup
                   value={[a.builtin.palette]}
                   onValueChange={(v) => v[0] && update({ avatar: { builtin: { palette: v[0] as (typeof PALETTES)[number]['id'] } } })}
@@ -418,7 +418,7 @@ export function AvatarPage() {
                   ))}
                 </ToggleGroup>
               </Field>
-              <FieldDescription>組み込みアバター「ぷるる」は、七つの大罪の状態で表情や動き（跳ね方・まばたき・揺れ）が変わります。</FieldDescription>
+              <FieldDescription>組み込みアバター「キャットリン」は、表情と七つの大罪の状態に合わせて、耳の角度・しっぽの振り方・まばたき・揺れ方が変わります。</FieldDescription>
             </FieldGroup>
           )}
           {a.kind === 'png' && <PngSettings />}

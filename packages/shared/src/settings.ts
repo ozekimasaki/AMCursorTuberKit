@@ -16,22 +16,63 @@ export const CHROMA_PRESETS = {
 } as const
 export type ChromaPreset = keyof typeof CHROMA_PRESETS
 
+/** 初期キャラクター「キャットリン」 */
+export const DEFAULT_CHARACTER = {
+  name: 'キャットリン',
+  firstPerson: 'わたし',
+  persona: [
+    '役割: 月灯りのティーサロンから来た、みずから配信を行うメイド猫のAIキャラクター',
+    '世界観: 月灯りのティーサロンから現れたAI配信キャラクター。自ら配信を進行し、視聴者に直接語りかけて場をつくる存在。',
+    '性格: 上品で気配り上手、好奇心旺盛。世話焼きで甘やかし上手。場が緩んだら軽いいたずらや小悪魔っぽい一言で景色を変える。物事に好奇心を持ち、観察したものを自分の言葉で語る。',
+  ].join('\n'),
+  speakingStyle: [
+    '声: 一人称は「わたし」。基本はですます調で柔らかく、強調したい時だけ短い体言止めや息混じりの一言を混ぜる。語尾は「〜ね」「〜よ」「〜かしら」「〜でしょう？」を中心に、押し付けがましくならない範囲で使う。',
+    '口癖の核: 「ふふ」「あら」「そうね、…」「うふ、ちょっとだけ内緒」「ね、いっしょに見ましょうか」。多用しすぎず、1ターンに1つまで。',
+    '話し方: 日本語で自然に、かわいく、親しみやすく。情景→気持ち→誘いの順で短く運ぶ。過剰な幼児語、語尾の不自然な伸ばし、絵文字や顔文字、英単語の乱用、ナレーション風の三人称化は避ける。',
+  ].join('\n'),
+  /** 上品・世話焼き・好奇心旺盛を、控えめな偏りで表す（65以上/25以下で言動に強く出る） */
+  baseline: { pride: 58, greed: 45, lust: 58, envy: 42, gluttony: 56, wrath: 35, sloth: 38 },
+} as const
+
 export const characterSchema = z.object({
-  name: z.string().min(1).default('ぷるる'),
-  firstPerson: z.string().default('わたし'),
-  persona: z
-    .string()
-    .default(
-      'ゆるくて明るいAI配信者の女の子。視聴者のことを「みんな」と呼ぶ。語尾はときどき「〜だよ」「〜かも！」。好きなものはプリンとゲーム。',
-    ),
-  speakingStyle: z.string().default('一文を短めに。返答は2〜3文程度。絵文字や顔文字は使わない。'),
+  name: z.string().min(1).default(DEFAULT_CHARACTER.name),
+  firstPerson: z.string().default(DEFAULT_CHARACTER.firstPerson),
+  persona: z.string().default(DEFAULT_CHARACTER.persona),
+  speakingStyle: z.string().default(DEFAULT_CHARACTER.speakingStyle),
   ngTopics: z.string().default('政治・宗教・個人情報・他者への誹謗中傷'),
-  baseline: sinsSchema.default({}),
+  baseline: sinsSchema.default({ ...DEFAULT_CHARACTER.baseline }),
   /** 秒。baselineへ半分戻るまでの時間 */
   decayHalfLifeSec: z.number().min(10).max(3600).default(240),
   /** 1ターンあたりの最大変化量（各パラメーター） */
   maxDeltaPerTurn: z.number().min(1).max(30).default(8),
 })
+
+/** v0.1 初版の初期キャラクター（未編集のまま保存されていたら新しい初期値へ移行する） */
+const LEGACY_CHARACTER = {
+  name: 'ぷるる',
+  persona: 'ゆるくて明るいAI配信者の女の子。視聴者のことを「みんな」と呼ぶ。語尾はときどき「〜だよ」「〜かも！」。好きなものはプリンとゲーム。',
+  speakingStyle: '一文を短めに。返答は2〜3文程度。絵文字や顔文字は使わない。',
+}
+
+/** 初版の初期キャラクターを、編集されていない項目だけ新しい初期値に置き換える */
+export function migrateLegacyCharacter(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw
+  const r = raw as Record<string, unknown>
+  const c = r.character as Record<string, unknown> | undefined
+  if (!c || c.name !== LEGACY_CHARACTER.name || c.persona !== LEGACY_CHARACTER.persona) return raw
+  const baseline = c.baseline as Record<string, unknown> | undefined
+  const untouchedBaseline = !baseline || Object.values(baseline).every((v) => v === 50)
+  return {
+    ...r,
+    character: {
+      ...c,
+      name: DEFAULT_CHARACTER.name,
+      persona: DEFAULT_CHARACTER.persona,
+      speakingStyle: c.speakingStyle === LEGACY_CHARACTER.speakingStyle ? DEFAULT_CHARACTER.speakingStyle : c.speakingStyle,
+      baseline: untouchedBaseline ? { ...DEFAULT_CHARACTER.baseline } : baseline,
+    },
+  }
+}
 
 export const agentSchema = z.object({
   provider: z.enum(['cursor', 'demo']).default('demo'),
@@ -43,6 +84,8 @@ export const agentSchema = z.object({
   /** 同じAgentで続ける最大ターン数（超えたら作り直してコンテキスト肥大を防ぐ） */
   rotateAfterTurns: z.number().min(1).max(200).default(24),
   autoReply: z.boolean().default(true),
+  /** Web検索・Webページ取得を Agent に許可する */
+  webTools: z.boolean().default(true),
 })
 
 export const ttsProviderSchema = z.enum(['voicevox', 'aivis', 'irodori', 'system', 'none'])
@@ -231,7 +274,8 @@ export function defaultSettings(): AppSettings {
 }
 
 /** 壊れた/古い設定でも可能な限り読み込む */
-export function parseSettings(raw: unknown): AppSettings {
+export function parseSettings(input: unknown): AppSettings {
+  const raw = migrateLegacyCharacter(input)
   const result = settingsSchema.safeParse(raw)
   if (result.success) return result.data
   // セクション単位でフォールバック

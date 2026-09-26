@@ -4,29 +4,67 @@ import type { AgentHealth, AgentRunHandlers, AgentRunResult, CharacterAgent, Too
 
 type SdkModule = typeof import('@cursor/sdk')
 type SdkAgent = Awaited<ReturnType<SdkModule['Agent']['create']>>
+type LocalAgentStore = import('@cursor/sdk').LocalAgentStore
+type Log = (level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => void
 
 export interface CursorAgentOptions {
   apiKey: string
   modelId: string
   /** Local Agent の作業ディレクトリ。アプリ専用の空ディレクトリを渡す */
   workspaceDir: string
+  /** SDK の Local Agent Store を置くフォルダ（アプリ専用。アプリ本体のDBとは分ける） */
+  storeDir: string
   rotateAfterTurns: number
+  /** Web検索・Webページ取得を許可する */
+  webTools: boolean
   bridge: ToolBridge
-  log?: (level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => void
+  log?: Log
 }
 
 /**
- * 公開してよいのは AMCursorTuberKit の Custom Tool のみ。
- * `tools: ['mcp']` で built-in の shell / read / edit / web 系をすべて外し、
- * MCPファミリーのうち customTools だけが使える状態にする。
- * settingSources: [] でユーザー環境の MCP 設定やルールを読み込ませない。
+ * Agent に渡す組み込みツールの許可リスト。
+ * - `mcp`：AMCursorTuberKit の Custom Tool（customTools）を使うために必要
+ * - `webSearch` / `webFetch`：設定でオンのときだけ許可
+ * シェル・ファイル操作は許可リストに入れない。
+ * settingSources: [] でユーザー環境の MCP 設定やルールも読み込ませない。
  */
-const ALLOWED_TOOLS = ['mcp'] as const
+export function allowedBuiltinTools(options: { web: boolean }): string[] {
+  return options.web ? ['mcp', 'webSearch', 'webFetch'] : ['mcp']
+}
+
+/** 許可リストの設定ミスがあっても使えないよう、明示的に外すツール */
+export const DENIED_BUILTIN_TOOLS = ['shell', 'edit', 'delete', 'read', 'grep', 'glob', 'ls', 'task', 'applyAgentDiff', 'semSearch'] as const
 
 let sdkPromise: Promise<SdkModule> | null = null
 function loadSdk(): Promise<SdkModule> {
   sdkPromise ??= import('@cursor/sdk')
   return sdkPromise
+}
+
+const storeCache = new Map<string, Promise<LocalAgentStore>>()
+
+/**
+ * SDK の Agent Store をアプリ専用のフォルダに開く。
+ * 既定の保存先（ホーム配下）はフォルダが無い環境で開けないことがあるため、場所を明示する。
+ * SQLite が使えない場合は JSONL ストアで続行する。
+ */
+function openStore(stateRoot: string, workspaceRef: string, log?: Log): Promise<LocalAgentStore> {
+  let p = storeCache.get(stateRoot)
+  if (!p) {
+    p = (async (): Promise<LocalAgentStore> => {
+      try {
+        const { SqliteLocalAgentStore } = await import('@cursor/sdk/sqlite')
+        return await SqliteLocalAgentStore.open({ workspaceRef, stateRoot })
+      } catch (err) {
+        log?.('warn', 'sqlite agent store unavailable, using jsonl store', { error: describeError(err) })
+        const sdk = await loadSdk()
+        return new sdk.JsonlLocalAgentStore(`${stateRoot}-jsonl`)
+      }
+    })()
+    p.catch(() => storeCache.delete(stateRoot))
+    storeCache.set(stateRoot, p)
+  }
+  return p
 }
 
 export class CursorCharacterAgent implements CharacterAgent {
@@ -59,16 +97,18 @@ export class CursorCharacterAgent implements CharacterAgent {
     return models.map((m) => ({ id: m.id, name: m.displayName || m.id }))
   }
 
-  private agentOptions() {
+  private agentOptions(store: LocalAgentStore) {
     return {
       apiKey: this.options.apiKey,
       model: { id: this.options.modelId },
       name: 'AMCursorTuberKit Character',
-      tools: [...ALLOWED_TOOLS],
+      // tools / disallowedTools / customTools は保存されないので、resume 時にも毎回渡す
+      tools: allowedBuiltinTools({ web: this.options.webTools }),
+      disallowedTools: [...DENIED_BUILTIN_TOOLS],
       local: {
         cwd: this.options.workspaceDir,
         settingSources: [],
-        // resume 時にも毎回 customTools を再適用する
+        store,
         customTools: this.tools as never,
         enableAgentRetries: true,
       },
@@ -77,6 +117,7 @@ export class CursorCharacterAgent implements CharacterAgent {
 
   private async ensureAgent(): Promise<SdkAgent> {
     const sdk = await loadSdk()
+    const store = await openStore(this.options.storeDir, this.options.workspaceDir, this.options.log)
     if (this.agent && this.turns >= this.options.rotateAfterTurns) {
       this.options.log?.('info', 'rotate agent to keep context small', { turns: this.turns })
       this.agent.close()
@@ -87,14 +128,14 @@ export class CursorCharacterAgent implements CharacterAgent {
     if (this.agent) return this.agent
     if (this.agentId) {
       try {
-        this.agent = await sdk.Agent.resume(this.agentId, this.agentOptions())
+        this.agent = await sdk.Agent.resume(this.agentId, this.agentOptions(store))
         return this.agent
       } catch (err) {
         this.options.log?.('warn', 'resume failed, creating new agent', { error: describeError(err) })
         this.agentId = null
       }
     }
-    this.agent = await sdk.Agent.create(this.agentOptions())
+    this.agent = await sdk.Agent.create(this.agentOptions(store))
     this.agentId = this.agent.agentId
     this.turns = 0
     return this.agent

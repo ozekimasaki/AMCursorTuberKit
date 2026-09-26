@@ -42,13 +42,13 @@ function pageFromHash(): PageId {
   return id in PAGES ? (id as PageId) : 'dashboard'
 }
 
-/** サイドバーのロゴ：組み込みマスコットを小さく動かす */
+/** サイドバーのロゴ：組み込みアバター（キャットリン）の顔を小さく動かす */
 function Logo() {
   const [el, setEl] = useState<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!el) return
     const a = new BuiltinAvatarAdapter(el)
-    void a.load({ kind: 'builtin', files: {}, options: { palette: 'strawberry' } })
+    void a.load({ kind: 'builtin', files: {}, options: { palette: 'strawberry', framing: 'face' } })
     a.setExpression('happy', 0.8)
     let raf = 0
     let last = performance.now()
