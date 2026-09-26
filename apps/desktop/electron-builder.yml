@@ -1,0 +1,44 @@
+appId: jp.amcursortuberkit.app
+electronVersion: 44.4.5
+productName: AMCursorTuberKit
+copyright: AMCursorTuberKit
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - build/icon.png
+  # main は CommonJS なので SDK の ESM / bundled ビルドと型・ソースマップは不要
+  - "!node_modules/@cursor/sdk/dist/esm/**"
+  - "!node_modules/@cursor/sdk/dist/bundled/**"
+  - "!**/*.map"
+  - "!**/*.d.ts"
+# Cursor SDK は実行ファイル（rg / tree-sitter）を含むので asar の外に出す
+asarUnpack:
+  - node_modules/@cursor/**
+# 使わない言語リソースを削ってサイズを抑える
+electronLanguages:
+  - ja
+  - en-US
+compression: maximum
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: ${productName}-${version}-Setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: AMCursorTuberKit
+mac:
+  target: dmg
+  category: public.app-category.entertainment
+  icon: build/icon.png
+linux:
+  target: AppImage
+  category: AudioVideo
+  icon: build/icon.png

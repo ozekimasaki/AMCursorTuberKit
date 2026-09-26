@@ -1,0 +1,13 @@
+name = "amctk-relay"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[[durable_objects.bindings]]
+name = "RELAY_HUB"
+class_name = "RelayHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayHub"]
+
+# RELAY_SECRET は `npx wrangler secret put RELAY_SECRET` で設定してください

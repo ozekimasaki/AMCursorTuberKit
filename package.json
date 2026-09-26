@@ -1,0 +1,31 @@
+{
+  "name": "amcursortuberkit",
+  "private": true,
+  "version": "0.1.0",
+  "description": "記憶と人格状態を持つAI配信アバターツール",
+  "packageManager": "pnpm@10.32.0",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @amctk/desktop dev",
+    "build": "pnpm --filter @amctk/desktop build",
+    "dist:win": "pnpm --filter @amctk/desktop dist:win",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@shadcn/lint": "0.2.0",
+    "@types/node": "^24.9.0",
+    "@typescript-eslint/parser": "^8.70.1",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "prettier": "^3.6.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^4.0.0"
+  }
+}

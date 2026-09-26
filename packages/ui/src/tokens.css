@@ -1,0 +1,122 @@
+/*
+ * AMCursorTuberKit Theme Tokens
+ * ポップで可愛い、でも操作画面として読みやすいことを優先したトークン。
+ * 色は必ずここのCSS変数から使う（コンポーネントに生の色を書かない）。
+ */
+
+:root {
+  /* Base */
+  --background: oklch(0.985 0.012 350);
+  --foreground: oklch(0.33 0.06 330);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.33 0.06 330);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.33 0.06 330);
+
+  /* Brand: いちごミルク */
+  --primary: oklch(0.7 0.19 355);
+  --primary-foreground: oklch(0.99 0.01 350);
+  --primary-shadow: oklch(0.58 0.17 355);
+  --secondary: oklch(0.955 0.03 350);
+  --secondary-foreground: oklch(0.45 0.14 355);
+  --muted: oklch(0.965 0.014 340);
+  --muted-foreground: oklch(0.55 0.04 330);
+  --accent: oklch(0.955 0.03 350);
+  --accent-foreground: oklch(0.4 0.12 355);
+  --destructive: oklch(0.64 0.21 18);
+  --border: oklch(0.92 0.03 345);
+  --input: oklch(0.9 0.035 345);
+  --ring: oklch(0.78 0.13 355);
+
+  /* Candy palette（アクセント用） */
+  --candy-pink: oklch(0.78 0.15 355);
+  --candy-mint: oklch(0.8 0.12 165);
+  --candy-lemon: oklch(0.9 0.13 95);
+  --candy-grape: oklch(0.72 0.14 295);
+  --candy-sky: oklch(0.78 0.11 235);
+  --candy-peach: oklch(0.8 0.12 50);
+
+  --candy-pink-soft: oklch(0.95 0.035 355);
+  --candy-mint-soft: oklch(0.955 0.035 165);
+  --candy-lemon-soft: oklch(0.97 0.045 95);
+  --candy-grape-soft: oklch(0.95 0.035 295);
+  --candy-sky-soft: oklch(0.955 0.03 235);
+  --candy-peach-soft: oklch(0.96 0.035 50);
+
+  /* 七つの大罪 */
+  --sin-pride: oklch(0.78 0.15 75);
+  --sin-greed: oklch(0.72 0.15 160);
+  --sin-lust: oklch(0.7 0.19 355);
+  --sin-envy: oklch(0.64 0.16 295);
+  --sin-gluttony: oklch(0.74 0.16 50);
+  --sin-wrath: oklch(0.64 0.21 20);
+  --sin-sloth: oklch(0.7 0.12 235);
+
+  /* Status */
+  --ok: oklch(0.7 0.15 160);
+  --warn: oklch(0.8 0.15 80);
+  --error: oklch(0.64 0.21 18);
+  --off: oklch(0.8 0.02 330);
+
+  --chart-1: var(--sin-lust);
+  --chart-2: var(--sin-greed);
+  --chart-3: var(--sin-sloth);
+  --chart-4: var(--sin-pride);
+  --chart-5: var(--sin-envy);
+
+  --radius: 0.9rem;
+
+  --sidebar: oklch(0.975 0.018 350);
+  --sidebar-foreground: oklch(0.36 0.06 330);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.94 0.04 352);
+  --sidebar-accent-foreground: oklch(0.42 0.14 355);
+  --sidebar-border: oklch(0.93 0.025 345);
+  --sidebar-ring: var(--ring);
+
+  /* Motion（emil-design-eng の推奨カーブ） */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-pop: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --shadow-pop-color: var(--primary-shadow);
+  --surface-dots: oklch(0.93 0.03 350);
+}
+
+.dark {
+  --background: oklch(0.22 0.03 320);
+  --foreground: oklch(0.95 0.015 340);
+  --card: oklch(0.26 0.035 320);
+  --card-foreground: oklch(0.95 0.015 340);
+  --popover: oklch(0.27 0.035 320);
+  --popover-foreground: oklch(0.95 0.015 340);
+  --primary: oklch(0.74 0.17 355);
+  --primary-foreground: oklch(0.2 0.04 330);
+  --primary-shadow: oklch(0.55 0.15 355);
+  --secondary: oklch(0.32 0.05 330);
+  --secondary-foreground: oklch(0.9 0.05 350);
+  --muted: oklch(0.3 0.035 320);
+  --muted-foreground: oklch(0.75 0.03 330);
+  --accent: oklch(0.34 0.06 335);
+  --accent-foreground: oklch(0.95 0.03 350);
+  --destructive: oklch(0.7 0.19 20);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.7 0.14 355);
+
+  --candy-pink-soft: oklch(0.33 0.07 355);
+  --candy-mint-soft: oklch(0.32 0.05 165);
+  --candy-lemon-soft: oklch(0.34 0.05 95);
+  --candy-grape-soft: oklch(0.32 0.06 295);
+  --candy-sky-soft: oklch(0.32 0.05 235);
+  --candy-peach-soft: oklch(0.33 0.05 50);
+
+  --sidebar: oklch(0.2 0.03 320);
+  --sidebar-foreground: oklch(0.92 0.02 340);
+  --sidebar-accent: oklch(0.32 0.06 340);
+  --sidebar-accent-foreground: oklch(0.95 0.03 350);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --surface-dots: oklch(0.28 0.035 320);
+}

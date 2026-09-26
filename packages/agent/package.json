@@ -1,0 +1,20 @@
+{
+  "name": "@amctk/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@amctk/shared": "workspace:*",
+    "@amctk/personality": "workspace:*",
+    "@amctk/core": "workspace:*",
+    "@cursor/sdk": "1.0.32"
+  }
+}

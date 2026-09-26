@@ -1,0 +1,7 @@
+node_modules
+out
+release
+*.md
+.agents
+.pi
+apps/desktop/src/renderer/src/components/ui
