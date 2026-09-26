@@ -34,4 +34,11 @@ describe('settings', () => {
     expect(style.character.speakingStyle).toBe('関西弁で話す')
     expect(style.character.baseline.wrath).toBe(80)
   })
+
+  it('組み込みアバターの既定はココア。旧版の既定色（strawberry）だけ移行し、選び直した色は残す', () => {
+    expect(defaultSettings().avatar.builtin).toEqual({ palette: 'cocoa', revision: 2 })
+    expect(parseSettings({ avatar: { kind: 'builtin', builtin: { palette: 'strawberry' } } }).avatar.builtin.palette).toBe('cocoa')
+    expect(parseSettings({ avatar: { builtin: { palette: 'mint' } } }).avatar.builtin.palette).toBe('mint')
+    expect(parseSettings({ avatar: { builtin: { palette: 'strawberry', revision: 2 } } }).avatar.builtin.palette).toBe('strawberry')
+  })
 })

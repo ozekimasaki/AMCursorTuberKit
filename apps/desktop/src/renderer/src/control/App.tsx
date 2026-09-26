@@ -48,7 +48,7 @@ function Logo() {
   useEffect(() => {
     if (!el) return
     const a = new BuiltinAvatarAdapter(el)
-    void a.load({ kind: 'builtin', files: {}, options: { palette: 'strawberry', framing: 'face' } })
+    void a.load({ kind: 'builtin', files: {}, options: { palette: 'cocoa', framing: 'face' } })
     a.setExpression('happy', 0.8)
     let raf = 0
     let last = performance.now()

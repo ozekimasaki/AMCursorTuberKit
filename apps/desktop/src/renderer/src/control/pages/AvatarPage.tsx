@@ -29,6 +29,7 @@ const KINDS: { id: AvatarKind; name: string; desc: string; emoji: string }[] = [
 ]
 
 const PALETTES = [
+  { id: 'cocoa', name: 'ココア', color: '#5a3a2c' },
   { id: 'strawberry', name: 'いちご', color: '#f5a3bf' },
   { id: 'mint', name: 'ミント', color: '#92d8bf' },
   { id: 'lemon', name: 'レモン', color: '#f6cf6a' },
@@ -408,7 +409,7 @@ export function AvatarPage() {
                   value={[a.builtin.palette]}
                   onValueChange={(v) => v[0] && update({ avatar: { builtin: { palette: v[0] as (typeof PALETTES)[number]['id'] } } })}
                   variant="outline"
-                  className="grid w-full grid-cols-4 gap-2"
+                  className="grid w-full grid-cols-5 gap-2"
                 >
                   {PALETTES.map((p) => (
                     <ToggleGroupItem key={p.id} value={p.id} className="h-auto flex-col whitespace-normal gap-1.5 rounded-2xl py-3">

@@ -7,28 +7,33 @@ import type {
 } from '@amctk/shared'
 import { Blinker, DEFAULT_MOTION, Spring, TalkBounce } from './motion'
 
-/** 髪・耳・しっぽ・リボンの色。メイド服（紺）とエプロン（白）は共通 */
+/**
+ * 髪・耳・しっぽ・リボン・目の色。メイド服（ブラウン）とエプロン（白）は共通。
+ * cocoa が初期の見た目（ダークブラウンのボブ・水色のリボン・エメラルドグリーンの目）。
+ */
 export const BUILTIN_PALETTES = {
-  strawberry: { hair: '#ffc9da', hairShade: '#f5a3bf', hairLine: '#d9739a', accent: '#ff5c8f', eye: '#f5b841', earInner: '#ffe3ec' },
-  mint: { hair: '#c6efe1', hairShade: '#92d8bf', hairLine: '#4fae8c', accent: '#23b58a', eye: '#f5b841', earInner: '#eafaf4' },
-  lemon: { hair: '#ffeaa8', hairShade: '#f6cf6a', hairLine: '#d4a12e', accent: '#ff8a3d', eye: '#8c6cf0', earInner: '#fff6d6' },
-  grape: { hair: '#e3d8ff', hairShade: '#c2aef6', hairLine: '#8a6fdc', accent: '#7a55e8', eye: '#f5b841', earInner: '#f3eeff' },
+  cocoa: { hair: '#5a3a2c', hairShade: '#46291f', hairLine: '#2e1a12', accent: '#7fd0f0', eye: '#2fbf86', eyeShade: '#0b5a40', earInner: '#f0c0b6', shine: '#a47a64' },
+  strawberry: { hair: '#ffc9da', hairShade: '#f5a3bf', hairLine: '#d9739a', accent: '#ff5c8f', eye: '#f5b841', eyeShade: '#8a4f12', earInner: '#ffe3ec', shine: '#ffffff' },
+  mint: { hair: '#c6efe1', hairShade: '#92d8bf', hairLine: '#4fae8c', accent: '#23b58a', eye: '#f5b841', eyeShade: '#8a4f12', earInner: '#eafaf4', shine: '#ffffff' },
+  lemon: { hair: '#ffeaa8', hairShade: '#f6cf6a', hairLine: '#d4a12e', accent: '#ff8a3d', eye: '#8c6cf0', eyeShade: '#3b2a7a', earInner: '#fff6d6', shine: '#ffffff' },
+  grape: { hair: '#e3d8ff', hairShade: '#c2aef6', hairLine: '#8a6fdc', accent: '#7a55e8', eye: '#f5b841', eyeShade: '#8a4f12', earInner: '#f3eeff', shine: '#ffffff' },
 } as const
 export type BuiltinPalette = keyof typeof BUILTIN_PALETTES
-type PaletteKey = keyof (typeof BUILTIN_PALETTES)['strawberry']
+type PaletteKey = keyof (typeof BUILTIN_PALETTES)['cocoa']
 
 const NS = 'http://www.w3.org/2000/svg'
-const INK = '#4a3350'
+const INK = '#3f2a2c'
 const SKIN = '#fff1e8'
-const DRESS = '#35366b'
-const DRESS_LIGHT = '#4a4c8a'
+const DRESS = '#7a4a36'
+const DRESS_LIGHT = '#98634b'
 const WHITE = '#ffffff'
-const WHITE_SHADE = '#e9e8f7'
+const WHITE_SHADE = '#f3ebe6'
 const GOLD = '#ffd166'
 const GOLD_LINE = '#e0a526'
+const CLIP_RIBBON = '#3dab6b'
 
 /** 全身表示 / 顔アップ（ロゴなど小さい表示用） */
-const VIEWBOX = { full: '0 0 400 420', face: '86 22 228 228' } as const
+const VIEWBOX = { full: '0 0 400 420', face: '78 28 244 244' } as const
 
 function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}, parent?: Element) {
   const node = document.createElementNS(NS, tag)
@@ -161,6 +166,9 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
   private earSprings = [new Spring(0, 220, 12), new Spring(0, 220, 12)]
   private twitchTimer = 2
   private tailLift = new Spring(0, 50, 8)
+  private bell!: SVGGElement
+  private bellSwing = new Spring(0, 90, 3.5)
+  private prevBounceY = 0
 
   constructor(private container: HTMLElement) {
     this.svg = el('svg', { viewBox: VIEWBOX.full, width: '100%', height: '100%', preserveAspectRatio: 'xMidYMax meet' })
@@ -170,16 +178,18 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
   }
 
   async load(source: AvatarSource): Promise<void> {
-    this.setPalette((source.options?.palette as BuiltinPalette) ?? 'strawberry')
+    this.setPalette((source.options?.palette as BuiltinPalette) ?? 'cocoa')
     if (source.options?.framing === 'face') {
       this.svg.setAttribute('viewBox', VIEWBOX.face)
       this.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
       this.svg.style.overflow = 'hidden'
+      // 顔アップではしっぽの先だけが端に見えてしまうので隠す
+      this.tail.style.display = 'none'
     }
   }
 
   setPalette(name: BuiltinPalette) {
-    const p = BUILTIN_PALETTES[name] ?? BUILTIN_PALETTES.strawberry
+    const p = BUILTIN_PALETTES[name] ?? BUILTIN_PALETTES.cocoa
     for (const { node, attr, key } of this.paletteNodes) node.setAttribute(attr, p[key])
   }
 
@@ -212,18 +222,18 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
     }
     this.paint(el('circle', { cx: 0, cy: 1, r: 4, stroke: INK, 'stroke-width': 2.5 }, tailBow), 'fill', 'accent')
 
-    // 後ろ髪
+    // 後ろ髪（ボブ：あごの高さで内巻きにまとまる）
     this.backHair = el('g', {}, this.rig)
     this.hairPath(
-      'M114 146 C 100 214 106 288 130 322 C 148 334 162 320 166 300 L 234 300 C 238 320 252 334 270 322 C 294 288 300 214 286 146 Z',
+      'M108 150 C 100 190 104 226 122 240 C 138 250 162 248 180 242 L 220 242 C 238 248 262 250 278 240 C 296 226 300 190 292 150 Z',
       this.backHair,
       'hairShade',
     )
 
-    // 体（靴 → フリル → スカート → エプロン → 胴 → 襟 → リボン → 腕）
+    // 体（靴 → フリル → スカート → エプロン → 胴 → 襟 → 鈴 → リボン → 腕）
     const body = el('g', {}, this.rig)
     for (const cx of [182, 218]) {
-      el('ellipse', { cx, cy: 404, rx: 15, ry: 7, fill: '#3a2f45', stroke: INK, 'stroke-width': 3 }, body)
+      el('ellipse', { cx, cy: 404, rx: 15, ry: 7, fill: '#3b2a26', stroke: INK, 'stroke-width': 3 }, body)
       el('ellipse', { cx: cx - 5, cy: 402, rx: 4, ry: 1.8, fill: '#ffffff', opacity: 0.5 }, body)
     }
     const hem = (x: number) => 388 + 8 * Math.sin((Math.PI * (x - 118)) / 164)
@@ -255,8 +265,16 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
     el('rect', { x: 158, y: 288, width: 84, height: 9, rx: 4, fill: WHITE, stroke: INK, 'stroke-width': 3 }, body)
     // 丸襟とリボン
     el('path', { d: 'M180 232 Q 176 252 196 250 L 200 240 L 204 250 Q 224 252 220 232 Z', fill: WHITE, stroke: INK, 'stroke-width': 3, 'stroke-linejoin': 'round' }, body)
+    // 首元の鈴（リボンの結び目から下がり、動きに合わせて揺れる）
+    this.bell = el('g', {}, body)
+    el('path', { d: 'M200 248 L 200 253', stroke: INK, 'stroke-width': 2 }, this.bell)
+    el('circle', { cx: 200, cy: 261, r: 8.5, fill: GOLD, stroke: GOLD_LINE, 'stroke-width': 2.5 }, this.bell)
+    el('path', { d: 'M192 258.5 Q 200 262 208 258.5', fill: 'none', stroke: GOLD_LINE, 'stroke-width': 1.8 }, this.bell)
+    el('circle', { cx: 200, cy: 263.5, r: 1.9, fill: '#7a5418' }, this.bell)
+    el('path', { d: 'M200 263.5 L 200 268', stroke: '#7a5418', 'stroke-width': 2, 'stroke-linecap': 'round' }, this.bell)
+    el('ellipse', { cx: 196.3, cy: 257.2, rx: 2.8, ry: 1.9, fill: '#ffffff', opacity: 0.75 }, this.bell)
     const bow = el('g', { transform: 'translate(200 246)' }, body)
-    for (const d of ['M0 0 C -12 -10 -22 2 -13 8 C -8 11 -3 5 0 0 Z', 'M0 0 C 12 -10 22 2 13 8 C 8 11 3 5 0 0 Z', 'M-2 2 L -8 16 L -3 14 Z', 'M2 2 L 8 16 L 3 14 Z']) {
+    for (const d of ['M0 0 C -12 -10 -22 2 -13 8 C -8 11 -3 5 0 0 Z', 'M0 0 C 12 -10 22 2 13 8 C 8 11 3 5 0 0 Z']) {
       this.paint(el('path', { d, stroke: INK, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, bow), 'fill', 'accent')
     }
     this.paint(el('circle', { cx: 0, cy: 1, r: 4.2, stroke: INK, 'stroke-width': 2.5 }, bow), 'fill', 'accent')
@@ -290,7 +308,7 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
 
     this.face = el('g', {}, this.head)
     // ほっぺ（赤み・照れ線）
-    for (const cx of [150, 250]) {
+    for (const cx of [154, 246]) {
       const g = el('g', {}, this.face)
       el('ellipse', { cx, cy: 199, rx: 15, ry: 8.5, fill: '#ff8fb0' }, g)
       this.cheeks.push(g)
@@ -303,7 +321,7 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
       const g = el('g', { transform: `translate(${cx} 172)` }, this.face)
       const open = el('g', {}, g)
       this.paint(el('ellipse', { cx: 0, cy: 2, rx: 15, ry: 19 }, open), 'fill', 'eye')
-      el('ellipse', { cx: 0, cy: -7, rx: 15, ry: 10, fill: '#6b3f1f', opacity: 0.16 }, open)
+      this.paint(el('ellipse', { cx: 0, cy: -7, rx: 15, ry: 10, opacity: 0.3 }, open), 'fill', 'eyeShade')
       el('ellipse', { cx: 0, cy: 3, rx: 4.5, ry: 11, fill: '#3a2140' }, open)
       el('ellipse', { cx: 0, cy: 12, rx: 9, ry: 5, fill: '#ffffff', opacity: 0.3 }, open)
       el('circle', { cx: -5, cy: -6, r: 6, fill: '#ffffff' }, open)
@@ -322,14 +340,14 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
 
     // 横髪・前髪（顔の上）
     for (const d of [
-      'M124 124 C 108 168 110 222 128 258 C 138 252 144 238 144 222 C 140 188 142 158 150 130 Z',
-      'M276 124 C 292 168 290 222 272 258 C 262 252 256 238 256 222 C 260 188 258 158 250 130 Z',
+      'M122 124 C 106 156 102 196 110 222 C 116 238 132 244 148 238 C 142 230 139 220 139 206 C 138 178 139 152 146 130 Z',
+      'M278 124 C 294 156 298 196 290 222 C 284 238 268 244 252 238 C 258 230 261 220 261 206 C 262 178 261 152 254 130 Z',
     ]) this.hairPath(d, this.head)
     this.hairPath(
       'M112 150 C 100 90 146 56 200 56 C 254 56 300 90 288 150 Q 281 133 273 125 Q 271 138 264 146 Q 253 127 236 120 Q 237 133 230 142 Q 218 123 202 119 Q 204 134 198 144 Q 188 125 170 120 Q 171 133 165 142 Q 153 126 138 124 Q 139 137 134 146 Q 126 133 122 128 Q 116 138 112 150 Z',
       this.head,
     )
-    el('path', { d: 'M146 88 Q 172 72 200 72 Q 228 72 254 88', fill: 'none', stroke: '#ffffff', 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.55 }, this.head)
+    this.paint(el('path', { d: 'M146 88 Q 172 72 200 72 Q 228 72 254 88', fill: 'none', 'stroke-width': 5, 'stroke-linecap': 'round', opacity: 0.6 }, this.head), 'stroke', 'shine')
     // 眉（前髪の上から透けて見える）
     for (const cx of [166, 234]) {
       const g = el('g', { transform: `translate(${cx} 142)` }, this.head)
@@ -347,10 +365,22 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
     }
     el('path', { d: 'M140 82 Q 200 42 260 82', fill: 'none', stroke: INK, 'stroke-width': 15, 'stroke-linecap': 'round' }, brim)
     el('path', { d: 'M140 82 Q 200 42 260 82', fill: 'none', stroke: WHITE, 'stroke-width': 9, 'stroke-linecap': 'round' }, brim)
-    // 三日月の髪飾り（月灯りのティーサロン）
-    const moon = el('g', { transform: 'translate(266 112) rotate(-24)' }, this.head)
-    el('path', { d: 'M0 -12 A12 12 0 1 0 0 12 A9 9 0 1 1 0 -12 Z', fill: GOLD, stroke: GOLD_LINE, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, moon)
-    el('path', { d: 'M11 -14 l 2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z', fill: GOLD, stroke: GOLD_LINE, 'stroke-width': 1.5, 'stroke-linejoin': 'round' }, moon)
+    // 髪留め：白いプリムローズに緑のリボン
+    const clip = el('g', { transform: 'translate(262 110) rotate(-14)' }, this.head)
+    for (const d of [
+      'M0 5 C -10 2 -25 9 -21 19 C -18 25 -8 19 0 9 Z',
+      'M0 5 C 10 2 25 9 21 19 C 18 25 8 19 0 9 Z',
+      'M-2 9 L -9 31 L -3 28 L 0 32 Z',
+      'M2 9 L 9 30 L 3 28 L 0 32 Z',
+    ]) el('path', { d, fill: CLIP_RIBBON, stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round' }, clip)
+    // 花びら5枚（先がハート形にくぼむのがプリムローズの特徴）
+    const petal = 'M0 0 C -9 -2 -13 -10 -9 -15.5 C -6 -18.5 -2 -17.5 0 -14.5 C 2 -17.5 6 -18.5 9 -15.5 C 13 -10 9 -2 0 0 Z'
+    for (let i = 0; i < 5; i++) {
+      el('path', { d: petal, fill: WHITE, stroke: INK, 'stroke-width': 2, 'stroke-linejoin': 'round', transform: `rotate(${i * 72})` }, clip)
+    }
+    el('circle', { cx: 0, cy: 0, r: 6.8, fill: '#fff2a8' }, clip)
+    el('circle', { cx: 0, cy: 0, r: 3.6, fill: '#ffd84d', stroke: GOLD_LINE, 'stroke-width': 1.4 }, clip)
+    el('circle', { cx: -1, cy: -1.1, r: 1, fill: '#ffffff', opacity: 0.8 }, clip)
 
     // エモート記号
     const mark = (name: string, build: (g: SVGGElement) => void) => {
@@ -471,9 +501,9 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
     this.face.setAttribute('transform', `translate(${(this.look.value * 6).toFixed(2)} ${(Math.abs(this.look.value) * 1.2).toFixed(2)})`)
 
     // 後ろ髪は少し遅れて揺れる
-    this.hairLag.target = tilt * 0.6
+    this.hairLag.target = tilt * 0.4
     this.hairLag.step(dt)
-    this.backHair.setAttribute('transform', `rotate(${(this.hairLag.value - tilt * 0.3).toFixed(2)} 200 110)`)
+    this.backHair.setAttribute('transform', `rotate(${(this.hairLag.value - tilt * 0.2).toFixed(2)} 200 140)`)
 
     // 耳：気分で角度が変わり、ときどきぴくっと動く
     this.twitchTimer -= dt
@@ -489,6 +519,14 @@ export class BuiltinAvatarAdapter implements AvatarAdapter {
       const pivot = i === 0 ? '140 98' : '260 98'
       this.ears[i].setAttribute('transform', `rotate(${(i === 0 ? -a : a).toFixed(2)} ${pivot})`)
     })
+
+    // 鈴：体の弾みと揺れで振り子のように揺れる
+    const by = this.bounce.y.value
+    this.bellSwing.impulse((by - this.prevBounceY) * 5)
+    this.prevBounceY = by
+    this.bellSwing.target = -this.sway.value * 3
+    this.bellSwing.step(dt)
+    this.bell.setAttribute('transform', `rotate(${this.bellSwing.value.toFixed(2)} 200 248)`)
 
     // しっぽ
     const swing = TAIL_SWING[this.emotion]

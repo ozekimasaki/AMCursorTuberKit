@@ -124,7 +124,11 @@ const emotionMapSchema = z.record(z.enum(AVATAR_EMOTIONS), z.string()).default({
 export const avatarSchema = z.object({
   kind: z.enum(AVATAR_KINDS).default('builtin'),
   builtin: z
-    .object({ palette: z.enum(['strawberry', 'mint', 'lemon', 'grape']).default('strawberry') })
+    .object({
+      palette: z.enum(['cocoa', 'strawberry', 'mint', 'lemon', 'grape']).default('cocoa'),
+      /** 見た目の版。2 = ボブカット・水色リボン・鈴のキャットリン */
+      revision: z.number().default(2),
+    })
     .default({}),
   png: z
     .object({
@@ -274,8 +278,18 @@ export function defaultSettings(): AppSettings {
 }
 
 /** 壊れた/古い設定でも可能な限り読み込む */
+/** 旧版の既定色（strawberry）のまま保存されていた組み込みアバターを、新しい既定（cocoa）へ移行する */
+export function migrateBuiltinLook(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw
+  const r = raw as Record<string, unknown>
+  const avatar = r.avatar as Record<string, unknown> | undefined
+  const builtin = avatar?.builtin as Record<string, unknown> | undefined
+  if (!builtin || builtin.revision !== undefined || builtin.palette !== 'strawberry') return raw
+  return { ...r, avatar: { ...avatar, builtin: { ...builtin, palette: 'cocoa', revision: 2 } } }
+}
+
 export function parseSettings(input: unknown): AppSettings {
-  const raw = migrateLegacyCharacter(input)
+  const raw = migrateBuiltinLook(migrateLegacyCharacter(input))
   const result = settingsSchema.safeParse(raw)
   if (result.success) return result.data
   // セクション単位でフォールバック
