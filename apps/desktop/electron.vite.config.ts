@@ -28,7 +28,12 @@ export default defineConfig({
   main: {
     build: {
       externalizeDeps: true,
-      rollupOptions: { input: { index: resolve(__dirname, 'src/main/index.ts') } },
+      rollupOptions: {
+        input: { index: resolve(__dirname, 'src/main/index.ts') },
+        // ws（@twurple/chat が使う）の任意の依存。入れていないので、取り込もうとすると Vite が代わりのモジュールに差し替え、
+        // 開発時は読み込んだ時点で例外になり、本番では 48 バイト以上の送信で例外になる。外部扱いにして ws 自身の try/catch に任せる
+        external: ['bufferutil', 'utf-8-validate'],
+      },
     },
   },
   preload: {
